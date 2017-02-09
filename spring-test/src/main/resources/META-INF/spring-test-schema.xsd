@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://www.jd.com/schema/spring-test-schema"
+          targetNamespace="http://www.jd.com/schema/spring-test-schema"
+        elementFormDefault="qualified" attributeFormDefault="unqualified">
+
+    <xs:element name="xmldto">
+        <xs:complexType>
+            <xs:attribute name="userName" type="xs:string" />
+            <xs:attribute name="email" type="xs:string" />
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

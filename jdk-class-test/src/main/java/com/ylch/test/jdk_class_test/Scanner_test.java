@@ -12,7 +12,6 @@ public class Scanner_test {
         String test_str = "I***amYlch";
 
         Scanner scanner = new Scanner(test_str);
-        scanner.
         while (scanner.hasNext()){
             System.out.println(scanner.next());
         }
