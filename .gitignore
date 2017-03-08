@@ -1,0 +1,14 @@
+.idea/
+design-patterns/src/test/
+jdk-class-test/jdk-class-test.iml
+jdk-class-test/src/main/resources/
+jdk-class-test/src/test/
+jdk-class-test/target/
+secutiry_test/secutiry_test.iml
+secutiry_test/src/main/resources/
+secutiry_test/src/test/
+secutiry_test/target/
+spring-test/src/test/
+spring-test/target/
+third-class-test/src/main/resources/
+third-class-test/src/test/
