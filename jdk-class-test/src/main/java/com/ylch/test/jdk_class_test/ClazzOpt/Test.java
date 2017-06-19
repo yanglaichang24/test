@@ -17,6 +17,5 @@ public class Test {
         Class<?> clazz = myclassLoad.defineMyClass(result, 0, read);
         Object demo= clazz.newInstance();
         clazz.getMethod("test",null).invoke(demo,null);
-
     }
 }

@@ -153,5 +153,14 @@
             <artifactId>lucene-analyzers-smartcn</artifactId>
             <version>${lucene.maven.version}</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/asm/asm -->
+        <!--<dependency>
+            <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+            <version>3.3.1</version>
+        </dependency>-->
+
+
     </dependencies>
 </project>

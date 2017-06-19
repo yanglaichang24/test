@@ -9,7 +9,7 @@ import static javassist.CtNewMethod.make;
 /**
  * Created by yanglaichang1 on 2017/2/9.
  */
-public class Test {
+public class SimpleTest {
 
     public static void main(String[] args) throws CannotCompileException, IOException {
         ClassPool pool = ClassPool.getDefault();
@@ -22,5 +22,9 @@ public class Test {
         cc.addMethod(method);
         //保存生成的字节码
         cc.writeFile("d://temp");
+
+        byte[] bytes = cc.toBytecode();
+
+
     }
 }

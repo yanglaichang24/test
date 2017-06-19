@@ -1,13 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns="http://www.jd.com/schema/spring-test-schema"
-          targetNamespace="http://www.jd.com/schema/spring-test-schema"
-        elementFormDefault="qualified" attributeFormDefault="unqualified">
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns="http://www.jd.com/schema/spring-test-schema"
+            targetNamespace="http://www.jd.com/schema/spring-test-schema"
+            elementFormDefault="qualified" attributeFormDefault="unqualified">
 
-    <xs:element name="xmldto">
-        <xs:complexType>
-            <xs:attribute name="userName" type="xs:string" />
-            <xs:attribute name="email" type="xs:string" />
-        </xs:complexType>
-    </xs:element>
-</xs:schema>
+    <xsd:element name="service">
+        <xsd:annotation>
+            <xsd:documentation><![CDATA[ 注册中心配置，可作为一级元素 ]]></xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:attribute name="id" type="xsd:ID" use="required"/>
+            <xsd:attribute name="userName" type="xsd:string"/>
+            <xsd:attribute name="email" type="xsd:string" />
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="controller">
+        <xsd:annotation>
+            <xsd:documentation><![CDATA[ 注册中心配置，可作为一级元素 ]]></xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:attribute name="id" type="xsd:ID" use="required"/>
+            <xsd:attribute name="userName" type="xsd:string"/>
+            <xsd:attribute name="email" type="xsd:string" />
+        </xsd:complexType>
+    </xsd:element>
+
+</xsd:schema>

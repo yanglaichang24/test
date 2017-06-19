@@ -13,17 +13,20 @@ public class JdkTest {
     public static void main(String[] args){
 
         DemoVoImpl demoVo = new DemoVoImpl();
-        DemoVo o = (DemoVo)Proxy.newProxyInstance(JdkTest.getCurrentClassLoader(), new Class[]{DemoVo.class}, new MyHandler(demoVo));
-       /* o.test1();
+
+        DemoVo o = (DemoVo)Proxy.newProxyInstance(
+                JdkTest.getCurrentClassLoader(), new Class[]{DemoVo.class}, new MyHandler(demoVo));
+        o.test1();
         String s = o.test2();
         System.out.println(s);
-        o.test03("eeee");*/
+        o.test03("eeee");
 
-        System.out.println(demoVo);
+        /*System.out.println(demoVo);
         DemoVoImpl demoVo2 = demoVo;
         demoVo = null;
+
         System.out.println(demoVo);
-        System.out.println(demoVo2);
+        System.out.println(demoVo2);*/
 
     }
 

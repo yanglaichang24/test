@@ -6,6 +6,6 @@ package com.ylch.test.jdk_class_test.ClazzOpt;
 public class DemoClazz {
 
     public void test(){
-        System.out.print(" lllllll");
+        System.out.print("lllllll");
     }
 }

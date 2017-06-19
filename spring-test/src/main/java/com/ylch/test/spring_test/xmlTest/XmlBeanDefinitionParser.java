@@ -21,15 +21,15 @@ public class XmlBeanDefinitionParser extends AbstractSingleBeanDefinitionParser 
         String name  = element.getAttribute("name");
         String email = element.getAttribute("email");
 
-        if (StringUtils.hasText(id)){
+       /* if (StringUtils.hasText(id)){
             builder.addPropertyValue("id",id);
-        }
+        }*/
         if (StringUtils.hasText(name)){
             builder.addPropertyValue("name",name);
         }
 
         if (StringUtils.hasText(email)){
-            builder.addPropertyValue("email",email);
+            builder.addPropertyValue("telephone",email);
         }
     }
 

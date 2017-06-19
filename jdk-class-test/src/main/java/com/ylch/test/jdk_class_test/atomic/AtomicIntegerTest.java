@@ -9,11 +9,39 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class AtomicIntegerTest {
 
-    public static void main(String[] args)
-    {
+    public static void main(String[] args) throws InterruptedException {
         final AtomicInteger atomicInteger = new AtomicInteger(0);
 
         new Thread(new Runnable() {
+            public void run() {
+                try { for(int i = 0;i<= 10;i++) {
+                    System.out.println(Thread.currentThread().getName() +
+                            " **** " + atomicInteger.get());
+                    Thread.sleep(1000L);
+                }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
+        new Thread(new Runnable() {
+            public void run() {
+                try { for(int i = 0;i<= 10;i++) {
+                    System.out.println(Thread.currentThread().getName() +
+                            " **** " + atomicInteger.get());
+                    Thread.sleep(2000L);
+                }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
+        Thread.sleep(5000L);
+        atomicInteger.set(1000);
+
+        /*new Thread(new Runnable() {
             public void run() {
                 try { for(int i = 0;i<= 10;i++) {
                     System.out.println(Thread.currentThread().getName() +
@@ -80,6 +108,12 @@ public class AtomicIntegerTest {
                 }
             }
         }).start();
+        */
+
+
+
+
+
     }
 
     @Test
@@ -92,8 +126,14 @@ public class AtomicIntegerTest {
         i = j = k;
 
         System.out.println(i + " --- " + j + " --- " + k);
+    }
 
-
+    @Test
+    public void test2(){
+        AtomicInteger atomicInteger = new AtomicInteger(10);
+        atomicInteger.set(100);
+        System.out.println(atomicInteger.get());
+        System.out.println(atomicInteger.incrementAndGet());
 
 
     }
