@@ -1,0 +1,3 @@
+Breaking changes in 2.0
+
+Removed features

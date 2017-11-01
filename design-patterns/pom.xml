@@ -4,11 +4,18 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <artifactId>test</artifactId>
+        <groupId>com.ylch.test</groupId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
     <groupId>com.ylch</groupId>
     <artifactId>design-patterns</artifactId>
+    <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
 
- <dependencies>
+    <dependencies>
      <dependency>
          <groupId>com.jd.ql.monitor</groupId>
          <artifactId>ql-data-esclient</artifactId>

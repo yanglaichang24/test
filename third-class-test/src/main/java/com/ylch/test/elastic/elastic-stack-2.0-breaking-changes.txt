@@ -1,0 +1,1170 @@
+ Breaking changes in 2.0
+
+ ############################################## 1.Removed features #######################################################
+ 1.1 Rivers have been removed
+ https://www.elastic.co/guide/en/elasticsearch/reference/2.4/breaking_20_removed_features.html#_rivers_have_been_removed
+ Elasticsearch does not support rivers anymore.While we had first planned to keep them around to ease migration,
+ keeping support for rivers proved to be challenging as it conflicted with other important changes that we wanted to bring to 2.0 like synchronous dynamic mappings updates,
+ so we eventually decided to remove them entirely. See Deprecating Rivers for more background about why we took this decision.
+
+1.2 Facets have been removed
+Facets, deprecated since 1.0, have now been removed. Instead, use the much more powerful and flexible aggregations framework. This also means that Kibana 3 will not work with Elasticsearch 2.0.
+
+1.3 MVEL has been removed
+The MVEL scripting language has been removed. The default scripting language is now Groovy.
+
+1.4 Delete-by-query is now a plugin
+The old delete-by-query functionality was fast but unsafe. It could lead to document differences between the primary and replica shards, and could even produce out of memory exceptions and cause the cluster to crash.
+This feature has been reimplemented using the scroll and bulk APIs, which may be slower for queries which match large numbers of documents, but is safe.
+Currently, a long running delete-by-query job cannot be cancelled, which is one of the reasons that this functionality is only available as a plugin. You can install the plugin with:
+./bin/plugin install delete-by-query
+See https://www.elastic.co/guide/en/elasticsearch/plugins/2.4/plugins-delete-by-query.html for more information.
+
+1.5 Multicast Discovery is now a plugin
+Multicast Discovery is now a pluginedit
+Support for multicast is very patchy. Linux doesn’t allow multicast listening on localhost, while OS/X sends multicast broadcasts across all interfaces regardless of the configured bind address. On top of that, some networks have multicast disabled by default.
+This feature has been moved to a plugin. The default discovery mechanism now uses unicast, with a default setup which looks for the first 5 ports on localhost. If you still need to use multicast discovery, you can install the plugin with:
+./bin/plugin install discovery-multicast
+See https://www.elastic.co/guide/en/elasticsearch/plugins/2.4/discovery-multicast.html for more information.
+
+1.6 _shutdown APIedit
+The _shutdown API has been removed without a replacement. Nodes should be managed via the operating system and the provided start/stop scripts.
+
+1.7 murmur3 is now a plugin
+The murmur3 field, which indexes hashes of the field values, has been moved out of core and is available as a plugin. It can be installed as:
+./bin/plugin install mapper-murmur3
+
+1.8 _size is now a plugin
+The _size meta-data field, which indexes the size in bytes of the original JSON document, has been moved out of core and is available as a plugin. It can be installed as:
+./bin/plugin install mapper-size
+
+1.9 Thrift and memcached transportedit
+The thrift and memcached transport plugins are no longer supported. Instead, use either the HTTP transport (enabled by default) or the node or transport Java client.
+
+1.10 Bulk UDP
+The bulk UDP API has been removed. Instead, use the standard bulk API, or use UDP to send documents to Logstash first.
+
+1.11 MergeScheduler pluggability
+The merge scheduler is no longer pluggable.
+
+############################################## 2.Network changes #######################################################
+2.1 Bind to localhost
+Elasticsearch 2.x will only bind to localhost by default. It will try to bind to both 127.0.0.1 (IPv4) and [::1] (IPv6), but will work happily in environments where only IPv4 or IPv6 is available. This change prevents Elasticsearch from trying to connect to other nodes on your network unless you specifically tell it to do so. When moving to production you should configure the network.host parameter, either in the elasticsearch.yml config file or on the command line:
+
+-------------------------------------------------------
+bin/elasticsearch --network.host 192.168.1.5
+bin/elasticsearch --network.host _non_loopback_
+-------------------------------------------------------
+
+The full list of options that network.host accepts can be found in the Network Settings.
+
+2.2 Multicast removed
+
+Multicast has been removed (although it is still provided as a plugin for now). Instead, and only when bound to localhost, Elasticsearch will use unicast to contact the first 5 ports in the transport.tcp.port range, which defaults to 9300-9400.
+This preserves the zero-config auto-clustering experience for the developer, but it means that you will have to provide a list of unicast hosts when moving to production, for instance:
+
+-------------------------------------------------------------------
+discovery.zen.ping.unicast.hosts: [ 192.168.1.2,  192.168.1.3 ]
+-------------------------------------------------------------------
+
+You don’t need to list all of the nodes in your cluster as unicast hosts, but you should specify at least a quorum (majority) of master-eligible nodes. A big cluster will typically have three dedicated master nodes, in which case we recommend listing all three of them as unicast hosts.
+
+############################################## 3.Multiple path.data striping #######################################################
+Multiple path.data stripingedit
+Previously, if the path.data setting listed multiple data paths, then a shard would be “striped” across all paths by writing a whole file to each path in turn (in accordance with the index.store.distributor setting). The result was that files from a single segment in a shard could be spread across multiple disks, and the failure of any one disk could corrupt multiple shards.
+This striping is no longer supported. Instead, different shards may be allocated to different paths, but all of the files in a single shard will be written to the same path.
+If striping is detected while starting Elasticsearch 2.0.0 or later, all of the files belonging to the same shard will be migrated to the same path. If there is not enough disk space to complete this migration, the upgrade will be cancelled and can only be resumed once enough disk space is made available.
+The index.store.distributor setting has also been removed.
+
+############################################## 4.Mapping changes #######################################################
+A number of changes have been made to mappings to remove ambiguity and to ensure that conflicting mappings cannot be created.
+One major change is that dynamically added fields must have their mapping confirmed by the master node before indexing continues. This is to avoid a problem where different shards in the same index dynamically add different mappings for the same field. These conflicting mappings can silently return incorrect results and can lead to index corruption.
+This change can make indexing slower when frequently adding many new fields. We are looking at ways of optimising this process but we chose safety over performance for this extreme use case.
+
+4.1 Conflicting field mappings
+Fields with the same name, in the same index, in different types, must have the same mapping, with the exception of the copy_to, dynamic, enabled, ignore_above, include_in_all, and properties parameters, which may have different settings per field.
+PUT my_index
+{
+  "mappings": {
+    "type_one": {
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "type_two": {
+      "properties": {
+        "name": {
+          "type":     "string",
+          "analyzer": "english"
+        }
+      }
+    }
+  }
+}
+
+
+The two name fields have conflicting mappings and will prevent Elasticsearch from starting.
+
+Elasticsearch will not start in the presence of conflicting field mappings. These indices must be deleted or reindexed using a new mapping.
+The ignore_conflicts option of the put mappings API has been removed. Conflicts can’t be ignored anymore.
+
+4.2 Fields cannot be referenced by short name
+A field can no longer be referenced using its short name. Instead, the full path to the field is required. For instance:
+m,
+
+PUT my_index
+{
+  "mappings": {
+    "my_type": {
+      "properties": {
+        "title":     { "type": "string" },
+        "name": {
+          "properties": {
+            "title": { "type": "string" },
+            "first": { "type": "string" },
+            "last":  { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+This field is referred to as title.
+This field is referred to as name.title.
+
+Previously, the two title fields in the example above could have been confused with each other when using the short name title.
+
+4.3 Type name prefix removed
+Previously, two fields with the same name in two different types could sometimes be disambiguated by prepending the type name. As a side effect, it would add a filter on the type name to the relevant query. This feature was ambiguous — a type name could be confused with a field name — and didn’t work everywhere e.g. aggregations.
+Instead, fields should be specified with the full path, but without a type name prefix. If you wish to filter by the _type field, either specify the type in the URL or add an explicit filter.
+The following example query in 1.x:
+
+GET my_index/_search
+{
+  "query": {
+    "match": {
+      "my_type.some_field": "quick brown fox"
+    }
+  }
+}
+would be rewritten in 2.0 as:
+
+GET my_index/my_type/_search
+{
+  "query": {
+    "match": {
+      "some_field": "quick brown fox"
+    }
+  }
+}
+
+The type name can be specified in the URL to act as a filter.
+The field name should be specified without the type prefix.
+
+4.4 Field names may not contain dots
+In 1.x, it was possible to create fields with dots in their name, for instance:
+PUT my_index
+{
+  "mappings": {
+    "my_type": {
+      "properties": {
+        "foo.bar": {
+          "type": "string"
+        },
+        "foo": {
+          "properties": {
+            "bar": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+These two fields cannot be distinguished as both are referred to as foo.bar.
+You can no longer create fields with dots in the name.
+
+4.5 Type names may not start with a dot
+In 1.x, Elasticsearch would issue a warning if a type name included a dot, e.g. my.type. Now that type names are no longer used to distinguish between fields in different types, this warning has been relaxed: type names may now contain dots, but they may not begin with a dot. The only exception to this is the special .percolator type.
+
+4.6 Type names may not be longer than 255 characters
+Mapping type names may not be longer than 255 characters. Long type names will continue to function on indices created before upgrade, but it will not be possible create types with long names in new indices.
+
+4.7 Types may no longer be deleted
+In 1.x it was possible to delete a type mapping, along with all of the documents of that type, using the delete mapping API. This is no longer supported, because remnants of the fields in the type could remain in the index, causing corruption later on.
+Instead, if you need to delete a type mapping, you should reindex to a new index which does not contain the mapping. If you just need to delete the documents that belong to that type, then use the delete-by-query plugin instead.
+
+4.8 Type meta-fields
+The meta-fields associated with had configuration options removed, to make them more reliable:
+_id : configuration can no longer be changed. If you need to sort, use the _uid field instead.
+_type : configuration can no longer be changed.
+_index : configuration can no longer be changed.
+_routing : configuration is limited to marking routing as required.
+_field_names  : configuration is limited to disabling the field.
+_size : configuration is limited to enabling the field.
+_timestamp : configuration is limited to enabling the field, setting format and default value.
+_boost :  has been removed.
+_analyzer :  has been removed.
+
+Importantly, meta-fields can no longer be specified as part of the document body. Instead, they must be specified in the query string parameters. For instance, in 1.x, the routing could be specified as follows:
+PUT my_index
+{
+  "mappings": {
+    "my_type": {
+      "_routing": {
+        "path": "group"
+      },
+      "properties": {
+        "group": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
+
+PUT my_index/my_type/1
+{
+  "group": "foo"
+}
+
+This 1.x mapping tells Elasticsearch to extract the routing value from the group field in the document body.
+This indexing request uses a routing value of foo.
+
+In 2.0, the routing must be specified explicitly:
+PUT my_index
+{
+  "mappings": {
+    "my_type": {
+      "_routing": {
+        "required": true
+      },
+      "properties": {
+        "group": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
+
+PUT my_index/my_type/1?routing=bar
+{
+  "group": "foo"
+}
+
+Routing can be marked as required to ensure it is not forgotten during indexing.
+This indexing request uses a routing value of bar.
+
+4.9 _timestamp and _ttl deprecated
+The _timestamp and _ttl fields are deprecated, but will remain functional for the remainder of the 2.x series.
+Instead of the _timestamp field, use a normal date field and set the value explicitly.
+The current _ttl functionality will be replaced in a future version with a new implementation of TTL, possibly with different semantics, and will not depend on the _timestamp field.
+
+4.10 Analyzer mappings
+Previously, index_analyzer and search_analyzer could be set separately, while the analyzer setting would set both. The index_analyzer setting has been removed in favour of just using the analyzer setting.
+If just the analyzer is set, it will be used at index time and at search time. To use a different analyzer at search time, specify both the analyzer and a search_analyzer.
+The index_analyzer, search_analyzer, and analyzer type-level settings have also been removed, as it is no longer possible to select fields based on the type name.
+The _analyzer meta-field, which allowed setting an analyzer per document has also been removed. It will be ignored on older indices.
+
+4.11 Date fields and Unix timestamps
+Previously, date fields would first try to parse values as a Unix timestamp — milliseconds-since-the-epoch — before trying to use their defined date format. This meant that formats like yyyyMMdd could never work, as values would be interpreted as timestamps.
+In 2.0, we have added two formats: epoch_millis and epoch_second. Only date fields that use these formats will be able to parse timestamps.
+These formats cannot be used in dynamic templates, because they are indistinguishable from long values.
+
+4.12 Default date format
+The default date format has changed from date_optional_time to strict_date_optional_time, which expects a 4 digit year, and a 2 digit month and day, (and optionally, 2 digit hour, minute, and second).
+A dynamically added date field, by default, includes the epoch_millis format to support timestamp parsing. For instance:
+PUT my_index/my_type/1
+{
+  "date_one": "2015-01-01"
+}
+mapping.date.round_ceil settingedit
+The mapping.date.round_ceil setting for date math parsing has been removed.
+
+4.13 Boolean fields
+Boolean fields used to have a string fielddata with F meaning false and T meaning true. They have been refactored to use numeric fielddata, with 0 for false and 1 for true. As a consequence, the format of the responses of the following APIs changed when applied to boolean fields: 0/1 is returned instead of F/T:
+fielddata fields
+sort values
+terms aggregations
+In addition, terms aggregations use a custom formatter for boolean (like for dates and ip addresses, which are also backed by numbers) in order to return the user-friendly representation of boolean fields: false/true:
+"buckets": [
+  {
+     "key": 0,
+     "key_as_string": "false",
+     "doc_count": 42
+  },
+  {
+     "key": 1,
+     "key_as_string": "true",
+     "doc_count": 12
+  }
+]
+
+4.14 index_name and path removed
+The index_name setting was used to change the name of the Lucene field, and the path setting was used on object fields to determine whether the Lucene field should use the full path (including parent object fields), or just the final name.
+These setting have been removed as their purpose is better served with the copy_to parameter.
+
+4.15 Murmur3 Fields
+Fields of type murmur3 can no longer change doc_values or index setting. They are always mapped as follows:
+{
+  "type":       "murmur3",
+  "index":      "no",
+  "doc_values": true
+}
+
+4.16 Attachment Fields
+Fields of type attachment used to index their content in the "main" multi-field — a sub-field with the same name as the main field, e.g. my_attachment.my_attachment. This sub-field will be renamed to my_attachment.content. Any mapping settings (e.g. analyzer) on the old my_attachment.my_attachment field will be lost. In this case, the index needs to be reindexed in 2.x.
+The attachment sub-fields do not support copy_to.
+
+4.17 Mappings in config files not supported
+The ability to specify mappings in configuration files has been removed. To specify default mappings that apply to multiple indexes, use index templates instead.
+Along with this change, the following settings have been removed:
+
+--------------------------------------------------------------------------
+index.mapper.default_mapping_location
+index.mapper.default_percolator_mapping_location
+---------------------------------------------------------------------------
+
+4.18 Fielddata formats
+Now that doc values are the default for fielddata, specialized in-memory formats have become an esoteric option. These fielddata formats have been removed:
+   fst on string fields
+   compressed on geo points
+The default fielddata format will be used instead.
+
+4.19 Posting and doc-values codecs
+It is no longer possible to specify per-field postings and doc values formats in the mappings. This setting will be ignored on indices created before 2.0 and will cause mapping parsing to fail on indices created on or after 2.0. For old indices, this means that new segments will be written with the default postings and doc values formats of the current codec.
+It is still possible to change the whole codec by using the index.codec setting. Please however note that using a non-default codec is discouraged as it could prevent future versions of Elasticsearch from being able to read the index.
+
+4.20 Compress and compress threshold
+The compress and compress_threshold options have been removed from the _source field and fields of type binary.
+These fields are compressed by default.
+If you would like to increase compression levels, use the new index.codec: best_compression setting instead.
+
+4.21 position_offset_gap
+The position_offset_gap option is renamed to position_increment_gap. This was done to clear away the confusion. Elasticsearch’s position_increment_gap now is mapped directly to Lucene’s position_increment_gap
+The default position_increment_gap is now 100. Indexes created in Elasticsearch 2.0.0 will default to using 100 and indexes created before that will continue to use the old default of 0. This was done to prevent phrase queries from matching across different values of the same term unexpectedly. Specifically, 100 was chosen to cause phrase queries with slops up to 99 to match only within a single value of a field.
+
+4.22 copy_to and multi fields
+A copy_to within a multi field is ignored from version 2.0 on. With any version after 2.1 or 2.0.1 creating a mapping that has a copy_to within a multi field will result in an exception.
+
+
+############################################## 5.CRUD and routing changes #######################################################
+
+5.1 Explicit custom routing
+Custom routing values can no longer be extracted from the document body, but must be specified explicitly as part of the query string, or in the metadata line in the bulk API. See Type meta-fields for an example.
+
+5.2 Routing hash function
+The default hash function that is used for routing has been changed from djb2 to murmur3. This change should be transparent unless you relied on very specific properties of djb2. This will help ensure a better balance of the document counts between shards.
+In addition, the following routing-related node settings have been deprecated:
+cluster.routing.operation.hash.type
+This was an undocumented setting that allowed to configure which hash function to use for routing. murmur3 is now enforced on new indices.
+cluster.routing.operation.use_type
+This was an undocumented setting that allowed to take the _type of the document into account when computing its shard (default: false). false is now enforced on new indices.
+
+5.3 Delete API with custom routing
+The delete API used to be broadcast to all shards in the index which meant that, when using custom routing, the routing parameter was optional. Now, the delete request is forwarded only to the shard holding the document. If you are using custom routing then you should specify the routing value when deleting a document, just as is already required for the index, create, and update APIs.
+To make sure that you never forget a routing value, make routing required with the following mapping:
+PUT my_index
+{
+  "mappings": {
+    "my_type": {
+      "_routing": {
+        "required": true
+      }
+    }
+  }
+}
+
+5.4 All stored meta-fields returned by default
+Previously, meta-fields like _routing, _timestamp, etc would only be included in a GET request if specifically requested with the fields parameter. Now, all meta-fields which have stored values will be returned by default. Additionally, they are now returned at the top level (along with _index, _type, and _id) instead of in the fields element.
+For instance, the following request:
+GET /my_index/my_type/1
+might return:
+
+{
+  "_index":     "my_index",
+  "_type":      "my_type",
+  "_id":        "1",
+  "_timestamp": 10000000,
+  "_source": {
+    "foo" : [ "bar" ]
+  }
+}
+
+The _timestamp is returned by default, and at the top level.
+
+5.5 Async replication
+The replication parameter has been removed from all CRUD operations (index, create, update, delete, bulk) as it interfered with the synced flush feature. These operations are now synchronous only and a request will only return once the changes have been replicated to all active shards in the shard group.
+Instead, use more client processes to send more requests in parallel.
+
+5.6 Documents must be specified without a type wrapper
+Previously, the document body could be wrapped in another object with the name of the type:
+PUT my_index/my_type/1
+{
+  "my_type": {
+    "text": "quick brown fox"
+  }
+}
+
+This my_type wrapper is not part of the document itself, but represents the document type.
+This feature was deprecated before but could be reenabled with the mapping.allow_type_wrapper index setting. This setting is no longer supported. The above document should be indexed as follows:
+
+PUT my_index/my_type/1
+{
+  "text": "quick brown fox"
+}
+
+5.7 Term Vectors API
+Usage of /_termvector is deprecated in favor of /_termvectors.
+
+
+############################################## 6.Query DSL changes #######################################################
+
+6.1 Queries and filters merged
+Queries and filters have been merged — all filter clauses are now query clauses.
+Instead, query clauses can now be used in query context or in filter context:
+Query context
+ A query used in query context will calculate relevance scores and will not be cacheable.
+ Query context is used whenever filter context does not apply.
+Filter context
+ A query used in filter context will not calculate relevance scores, and will be cacheable.
+ Filter context is introduced by:
+ the constant_score query
+ the must_not and (newly added) filter parameter in the bool query
+ the filter and filters parameters in the function_score query
+ any API called filter, such as the post_filter search parameter, or in aggregations or index aliases
+
+6.2 terms query and filter
+The execution option of the terms filter is now deprecated and is ignored if provided. Similarly, the terms query no longer supports the minimum_should_match parameter.
+
+6.3 or and and now implemented via bool
+The or and and filters previously had a different execution pattern to the bool filter. It used to be important to use and/or with certain filter clauses, and bool with others.
+This distinction has been removed: the bool query is now smart enough to handle both cases optimally. As a result of this change, the or and and filters are now sugar syntax which are executed internally as a bool query. These filters may be removed in the future.
+
+6.4 filtered query and query filter deprecated
+The query filter is deprecated as is it no longer needed — all queries can be used in query or filter context.
+The filtered query is deprecated in favour of the bool query. Instead of the following:
+GET _search
+{
+  "query": {
+    "filtered": {
+      "query": {
+        "match": {
+          "text": "quick brown fox"
+        }
+      },
+      "filter": {
+        "term": {
+          "status": "published"
+        }
+      }
+    }
+  }
+}
+
+move the query and filter to the must and filter parameters in the bool query:
+
+GET _search
+{
+  "query": {
+    "bool": {
+      "must": {
+        "match": {
+          "text": "quick brown fox"
+        }
+      },
+      "filter": {
+        "term": {
+          "status": "published"
+        }
+      }
+    }
+  }
+}
+
+6.5 Filter auto-caching
+It used to be possible to control which filters were cached with the _cache option and to provide a custom _cache_key. These options are deprecated and, if present, will be ignored.
+Query clauses used in filter context are now auto-cached when it makes sense to do so. The algorithm takes into account the frequency of use, the cost of query execution, and the cost of building the filter.
+The terms filter lookup mechanism no longer caches the values of the document containing the terms. It relies on the filesystem cache instead. If the lookup index is not too large, it is recommended to replicate it to all nodes by setting index.auto_expand_replicas: 0-all in order to remove the network overhead as well.
+
+6.6 Numeric queries use IDF for scoring
+Previously, term queries on numeric fields were deliberately prevented from using the usual Lucene scoring logic and this behaviour was undocumented and, to some, unexpected.
+Single term queries on numeric fields now score in the same way as string fields, using IDF and norms (if enabled).
+To query numeric fields without scoring, the query clause should be used in filter context, e.g. in the filter parameter of the bool query, or wrapped in a constant_score query:
+
+GET _search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "numeric_tag": 5
+          }
+        }
+      ],
+      "filter": [
+        {
+          "match": {
+            "count": 5
+          }
+        }
+      ]
+    }
+  }
+}
+
+
+
+This clause would include IDF in the relevance score calculation.
+
+This clause would have no effect on the relevance score.
+
+6.7 Fuzziness and fuzzy-like-this
+Fuzzy matching used to calculate the score for each fuzzy alternative, meaning that rare misspellings would have a higher score than the more common correct spellings. Now, fuzzy matching blends the scores of all the fuzzy alternatives to use the IDF of the most frequently occurring alternative.
+Fuzziness can no longer be specified using a percentage, but should instead use the number of allowed edits:
+AUTO (which chooses 0, 1, or 2 based on the length of the term)
+The fuzzy_like_this and fuzzy_like_this_field queries used a very expensive approach to fuzzy matching and have been removed.
+
+6.8 More Like This
+The More Like This (mlt) API and the more_like_this_field (mlt_field) query have been removed in favor of the more_like_this query.
+
+6.9 limit filter deprecated
+The limit filter is deprecated and becomes a no-op. You can achieve similar behaviour using the terminate_after parameter.
+
+6.10 Java plugins registering custom queries
+Java plugins that register custom queries can do so by using the IndicesQueriesModule#addQuery(Class<? extends QueryParser>) method. Other ways to register custom queries are not supported anymore.
+
+############################################## 7.Search changes #######################################################
+7.1 Partial fields
+Partial fields have been removed in favor of source filtering.
+
+7.2 search_type=count deprecated
+The count search type has been deprecated. All benefits from this search type can now be achieved by using the (default) query_then_fetch search type and setting size to 0.
+
+7.3 The count api internally uses the search api
+The count api is now a shortcut to the search api with size set to 0. As a result, a total failure will result in an exception being returned rather than a normal response with count set to 0 and shard failures.
+
+7.4 All stored meta-fields returned by default
+Previously, meta-fields like _routing, _timestamp, etc would only be included in the search results if specifically requested with the fields parameter. Now, all meta-fields which have stored values will be returned by default. Additionally, they are now returned at the top level (along with _index, _type, and _id) instead of in the fields element.
+For instance, the following request:
+GET /my_index/_search?fields=foo
+might return:
+
+{
+   [...]
+   "hits": {
+      "total": 1,
+      "max_score": 1,
+      "hits": [
+         {
+            "_index":     "my_index",
+            "_type":      "my_type",
+            "_id":        "1",
+            "_score":     1,
+            "_timestamp": 10000000,
+            "fields": {
+              "foo" : [ "bar" ]
+            }
+         }
+      ]
+   }
+}
+
+The _timestamp is returned by default, and at the top level.
+
+7.5 Script fields
+Script fields in 1.x were only returned as a single value. Even if the return value of a script was a list, it would be returned as an array containing an array:
+"fields": {
+  "my_field": [
+    [
+      "v1",
+      "v2"
+    ]
+  ]
+}
+
+In elasticsearch 2.0, scripts that return a list of values are treated as multivalued fields. The same example would return the following response, with values in a single array.
+"fields": {
+  "my_field": [
+    "v1",
+    "v2"
+  ]
+}
+
+7.6 Timezone for date field
+Specifying the time_zone parameter in queries or aggregations on fields of type date must now be either an ISO 8601 UTC offset, or a timezone id. For example, the value +1:00 must now be written as +01:00.
+
+7.7 Only highlight queried fields
+The default value for the require_field_match option has changed from false to true, meaning that the highlighters will, by default, only take the fields that were queried into account.
+This means that, when querying the _all field, trying to highlight on any field other than _all will produce no highlighted snippets. Querying the same fields that need to be highlighted is the cleaner solution to get highlighted snippets back. Otherwise require_field_match option can be set to false to ignore field names completely when highlighting.
+The postings highlighter doesn’t support the require_field_match option anymore, it will only highlight fields that were queried.
+
+7.8 Postings highlighter doesn’t support match_phrase_prefix
+The match query with type set to phrase_prefix (or the match_phrase_prefix query) is not supported by the postings highlighter. No highlighted snippets will be returned.
+
+############################################## 8.Aggregation changes #######################################################
+
+8.1 Min doc count defaults to zero
+Both the histogram and date_histogram aggregations now have a default min_doc_count of 0 instead of 1.
+
+8.2 Timezone for date field
+Specifying the time_zone parameter in queries or aggregations on fields of type date must now be either an ISO 8601 UTC offset, or a timezone id. For example, the value +1:00 must now be written as +01:00.
+
+8.3 Time zones and offsets
+The histogram and the date_histogram aggregation now support a simplified offset option that replaces the previous pre_offset and post_offset rounding options. Instead of having to specify two separate offset shifts of the underlying buckets, the offset option moves the bucket boundaries in positive or negative direction depending on its argument.
+The date_histogram options for pre_zone and post_zone are replaced by the time_zone option. The behavior of time_zone is equivalent to the former pre_zone option. Setting time_zone to a value like "+01:00" now will lead to the bucket calculations being applied in the specified time zone. The key is returned as the timestamp in UTC, but the key_as_string is returned in the time zone specified.
+In addition to this, the pre_zone_adjust_large_interval is removed because we now always return dates and bucket keys in UTC.
+
+8.4 Including/excluding terms
+include/exclude filtering on the terms aggregation now uses the same syntax as regexp queries instead of the Java regular expression syntax. While simple regexps should still work, more complex ones might need some rewriting. Also, the flags parameter is no longer supported.
+
+8.5 Boolean field
+Aggregations on boolean fields will now return 0 and 1 as keys, and "true" and "false" as string keys. See Boolean fields for more information.
+
+8.6 Java aggregation classes
+The date_histogram aggregation now returns a Histogram object in the response, and the DateHistogram class has been removed. Similarly the date_range, ipv4_range, and geo_distance aggregations all return a Range object in the response, and the IPV4Range, DateRange, and GeoDistance classes have been removed.
+
+The motivation for this is to have a single response API for the Range and Histogram aggregations regardless of the type of data being queried. To support this some changes were made in the MultiBucketAggregation interface which applies to all bucket aggregations:
+
+*******************************************************************
+ The getKey() method now returns Object instead of String. The actual object type returned depends on the type of aggregation requested (e.g. the date_histogram will return a DateTime object for this method whereas a histogram will return a Number).
+ A getKeyAsString() method has been added to return the String representation of the key.
+ All other getKeyAsX() methods have been removed.
+ The getBucketAsKey(String) methods have been removed on all aggregations except the filters and terms aggregations.
+********************************************************************
+
+
+############################################## 9.Parent/Child changes #######################################################
+Parent/child has been rewritten completely to reduce memory usage and to execute has_child and has_parent queries faster and more efficient. The _parent field uses doc values by default. The refactored and improved implementation is only active for indices created on or after version 2.0.
+In order to benefit from all the performance and memory improvements, we recommend reindexing all existing indices that use the _parent field.
+
+9.1 Parent type cannot pre-exist
+A mapping type is declared as a child of another mapping type by specifying the _parent meta field:
+DELETE *
+
+PUT my_index
+{
+  "mappings": {
+    "my_parent": {},
+    "my_child": {
+      "_parent": {
+        "type": "my_parent"
+      }
+    }
+  }
+}
+
+The my_parent type is the parent of the my_child type.
+
+The mapping for the parent type can be added at the same time as the mapping for the child type, but cannot be added before the child type.
+
+9.2 top_children query removed
+The top_children query has been removed in favour of the has_child query. It wasn’t always faster than the has_child query and the results were usually inaccurate. The total hits and any aggregations in the same search request would be incorrect if top_children was used.
+
+
+############################################## 10.Scripting changes #######################################################
+10.1 Scripting syntax
+The syntax for scripts has been made consistent across all APIs. The accepted format is as follows:
+Inline/Dynamic scripts
+"script": {
+  "inline": "doc['foo'].value + val",  //The inline script to execute.
+  "lang":   "groovy",  //The optional language of the script.
+  "params": { "val": 3 }  //Any named parameters.
+}
+
+Indexed scripts
+"script": {
+  "id":     "my_script_id",
+  "lang":   "groovy",
+  "params": { "val": 3 }
+}
+
+The ID of the indexed script.
+The optional language of the script.
+Any named parameters.
+
+File scripts
+"script": {
+  "file":   "my_file",
+  "lang":   "groovy",
+  "params": { "val": 3 }
+}
+
+The filename of the script, without the .lang suffix.
+The optional language of the script.
+Any named parameters.
+
+For example, an update request might look like this:
+POST my_index/my_type/1/_update
+{
+  "script": {
+    "inline": "ctx._source.count += val",
+    "params": { "val": 3 }
+  },
+  "upsert": {
+    "count": 0
+  }
+}
+
+For example, an update request might look like this:
+POST my_index/my_type/1/_update
+{
+  "script": {
+    "inline": "ctx._source.count += val",
+    "params": { "val": 3 }
+  },
+  "upsert": {
+    "count": 0
+  }
+}
+
+A short syntax exists for running inline scripts in the default scripting language without any parameters:
+GET _search
+{
+  "script_fields": {
+    "concat_fields": {
+      "script": "doc['one'].value + ' ' + doc['two'].value"
+    }
+  }
+}
+
+10.2 Scripting settings
+The script.disable_dynamic node setting has been replaced by fine-grained script settings described in Scripting settings.
+
+10.3 Groovy scripts sandbox
+The Groovy sandbox and related settings have been removed. Groovy is now a non-sandboxed scripting language, without any option to turn the sandbox on.
+
+############################################## 11.Index API changes #######################################################
+11.1 Index aliases
+Fields used in alias filters no longer have to exist in the mapping at alias creation time. Previously, alias filters were parsed at alias creation time and the parsed form was cached in memory. Now, alias filters are parsed at request time and the fields in filters are resolved from the current mapping.
+This also means that index aliases now support has_parent and has_child queries.
+
+The GET alias api will now throw an exception if no matching aliases are found. This change brings the defaults for this API in line with the other Indices APIs. The Multiple Indices options can be used on a request to change this behavior.
+
+11.2 File based index templates
+Index templates can no longer be configured on disk. Use the _template API instead.
+
+11.3 Analyze API changes
+The Analyze API now returns the position of the first token as 0 instead of 1.
+The prefer_local parameter has been removed. The _analyze API is a light operation and the caller shouldn’t be concerned about whether it executes on the node that receives the request or another node.
+
+The text() method on AnalyzeRequest now returns String[] instead of String.
+
+11.4 Removed id_cache from clear cache api
+The clear cache API no longer supports the id_cache option. Instead, use the fielddata option to clear the cache for the _parent field.
+
+
+############################################## 12.Snapshot and Restore changes #######################################################
+12.1 File-system repositories must be whitelisted
+
+Locations of the shared file system repositories and the URL repositories with file: URLs now have to be registered before starting Elasticsearch using the path.repo setting. The path.repo setting can contain one or more repository locations:
+path.repo: ["/mnt/daily", "/mnt/weekly"]
+
+If the repository location is specified as an absolute path it has to start with one of the locations specified in path.repo. If the location is specified as a relative path, it will be resolved against the first location specified in the path.repo setting.
+
+12.2 URL repositories must be whitelisted
+URL repositories with http:, https:, and ftp: URLs have to be whitelisted before starting Elasticsearch with the repositories.url.allowed_urls setting. This setting supports wildcards in the place of host, path, query, and fragment. For example:
+
+repositories.url.allowed_urls: ["http://www.example.org/root/*", "https://*.mydomain.com/*?*#*"]
+
+12.3 Wildcard expansion
+The obsolete parameters expand_wildcards_open and expand_wildcards_close are no longer supported by the snapshot and restore operations. These parameters have been replaced by a single expand_wildcards parameter. See the multi-index docs for more.
+
+############################################## 13.Plugin and packaging changes #######################################################
+13.1 Symbolic links and paths
+Elasticsearch 2.0 runs with the Java security manager enabled and is much more restrictive about which paths it is allowed to access. Various paths can be configured, e.g. path.data, path.scripts, path.repo. A configured path may itself be a symbolic link, but no symlinks under that path will be followed.
+
+13.2 Running bin/elasticsearch
+The command line parameter parsing has been rewritten to deal properly with spaces in parameters. All config settings can still be specified on the command line when starting Elasticsearch, but they must appear after the built-in "static parameters", such as -d (to daemonize) and -p (the PID path).
+
+For instance:
+bin/elasticsearch -d -p /tmp/foo.pid --http.cors.enabled=true --http.cors.allow-origin='*'
+
+For a list of static parameters, run bin/elasticsearch -h
+
+13.3 -f removed
+The -f parameter, which used to indicate that Elasticsearch should be run in the foreground, was deprecated in 1.0 and removed in 2.0.
+
+13.4 V for version
+The -f parameter, which used to indicate that Elasticsearch should be run in the foreground, was deprecated in 1.0 and removed in 2.0.
+
+13.5 V for version
+The -v parameter now means --verbose for both bin/plugin and bin/elasticsearch (although it has no effect on the latter). To output the version, use -V or --version instead.
+
+13.6 Plugin manager should run as root
+The permissions of the config, bin, and plugins directories in the RPM and deb packages have been made more restrictive. The plugin manager should be run as root otherwise it will not be able to install plugins.
+
+13.7 Support for official plugins
+Almost all of the official Elasticsearch plugins have been moved to the main elasticsearch repository. They will be released at the same time as Elasticsearch and have the same version number as Elasticsearch.
+Official plugins can be installed as follows:
+sudo bin/plugin install analysis-icu
+
+Community-provided plugins can be installed as before.
+
+13.8 Plugins require descriptor file
+All plugins are now required to have a plugin-descriptor.properties file. If a node has a plugin installed which lacks this file, it will be unable to start.
+Elasticsearch 2.0 changes the way the repository URLs are referenced. Instead of specific repositories for both major and minor versions, the repositories will use a major version reference only.
+
+The URL for apt packages now uses the following structure;
+deb https://packages.elastic.co/elasticsearch/2.x/debian stable main
+
+And for yum packages it is;
+baseurl=https://packages.elastic.co/elasticsearch/2.x/centos
+The repositories page details this change.
+
+############################################## 14.Setting changes #######################################################
+
+14.1 Command line flags
+Command line flags using single dash notation must be now specified as the first arguments. For example if previously using:
+
+./elasticsearch --node.name=test_node -Des.path.conf=/opt/elasticsearch/conf/test_node
+This will now need to be changed to:
+
+./elasticsearch -Des.path.conf=/opt/elasticsearch/conf/test_node --node.name=test_node
+for the flag to take effect.
+
+14.2 Scripting settings
+The script.disable_dynamic node setting has been replaced by fine-grained script settings described in the scripting docs. The following setting previously used to enable dynamic or inline scripts:
+
+script.disable_dynamic: false
+
+It should be replaced with the following two settings in elasticsearch.yml that achieve the same result:
+
+script.inline: true
+script.indexed: true
+
+14.3 Units required for time and byte-sized settings
+Any settings which accept time or byte values must now be specified with units. For instance, it is too easy to set the refresh_interval to 1 millisecond instead of 1 second:
+PUT _settings
+{
+  "index.refresh_interval": 1
+}
+
+In 2.0, the above request will throw an exception. Instead the refresh interval should be set to "1s" for one second.
+
+14.4 Merge and merge throttling settings
+The tiered merge policy is now the only supported merge policy. These settings have been removed:
+
+--------------------------------
+index.merge.policy.type
+index.merge.policy.min_merge_size
+index.merge.policy.max_merge_size
+index.merge.policy.merge_factor
+index.merge.policy.max_merge_docs
+index.merge.policy.calibrate_size_by_deletes
+index.merge.policy.min_merge_docs
+index.merge.policy.max_merge_docs
+--------------------------------------
+Merge throttling now uses a feedback loop to auto-throttle. These settings have been removed:
+
+------------------------------------------
+indices.store.throttle.type
+indices.store.throttle.max_bytes_per_sec
+index.store.throttle.type
+index.store.throttle.max_bytes_per_sec
+-------------------------------------------
+
+14.5 Shadow replica settings
+The node.enable_custom_paths setting has been removed and replaced by the path.shared_data
+setting to allow shadow replicas with custom paths to work with the security manager. For example, if your previous configuration had:
+node.enable_custom_paths: true
+
+And you created an index using shadow replicas with index.data_path set to /opt/data/my_index with the following:
+PUT /my_index
+{
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 4,
+    "data_path": "/opt/data/my_index",
+    "shadow_replicas": true
+  }
+}
+
+For 2.0, you will need to set path.shared_data to a parent directory of the index’s data_path, so:
+path.shared_data: /opt/data
+
+14.6 Resource watcher settings renamed
+The setting names for configuring the resource watcher have been renamed to prevent clashes with the watcher plugin
+
+---------------------------------------------------------------
+watcher.enabled is now resource.reload.enabled
+watcher.interval is now resource.reload.interval
+watcher.interval.low is now resource.reload.interval.low
+watcher.interval.medium is now resource.reload.interval.medium
+watcher.interval.high is now resource.reload.interval.high
+-----------------------------------------------------------------
+
+14.7 index.gateway setting renamed
+index.gateway.local.sync is now index.translog.sync_interval
+
+14.8 Hunspell dictionary configuration
+The parameter indices.analysis.hunspell.dictionary.location has been removed, and <path.conf>/hunspell is always used.
+
+14.9 CORS allowed origins
+The CORS allowed origins setting, http.cors.allow-origin, no longer has a default value. Previously, the default value was *, which would allow CORS requests from any origin and is considered insecure. The http.cors.allow-origin setting should be specified with only the origins that should be allowed, like so:]
+http.cors.allow-origin: /https?:\/\/localhost(:[0-9]+)?/
+
+14.10 JSONP support
+JSONP callback support has now been removed. CORS should be used to access Elasticsearch over AJAX instead:
+http.cors.enabled: true
+http.cors.allow-origin: /https?:\/\/localhost(:[0-9]+)?/
+
+14.11 In memory indices
+The memory / ram store (index.store.type) option was removed in Elasticsearch. In-memory indices are no longer supported.
+
+14.12 Log messages truncated
+Log messages are now truncated at 10,000 characters. This can be changed in the logging.yml configuration file with the file.layout.conversionPattern setting.
+
+14.13 Custom config file
+It is no longer possible to specify a custom config file with the CONF_FILE environment variable, or the -Des.config, -Des.default.config, or -Delasticsearch.config parameters.
+Instead, the config file must be named elasticsearch.yml and must be located in the default config/ directory, unless a custom config directory is specified.
+The location of a custom config directory may be specified as follows:
+
+./bin/elasticsearch --path.conf=/path/to/conf/dir
+./bin/plugin -Des.path.conf=/path/to/conf/dir install analysis-icu
+
+When using the RPM or debian packages, the plugin script and the init/service scripts will consult the CONF_DIR environment variable to check for a custom config location. The value of the CONF_DIR variable can be set in the environment config file which is located either in /etc/default/elasticsearch or /etc/sysconfig/elasticsearch.
+
+14.14 Custom analysis file paths
+It is no longer possible to set custom file path outside CONF_DIR for *_path settings in char or token filters. You must specify either relative path to CONF_DIR location or absolute path inside CONF_DIR location.
+
+14.15 ES_CLASSPATH removed
+The ES_CLASSPATH environment variable is no longer used to set the class path. External libraries should preferably be loaded using the plugin mechanism or, if you really must, be copied to the lib/ directory.
+
+
+############################################## 15.Stats, info, and cat changes #######################################################
+15.1 Sigar removed
+We no longer ship the Sigar library for operating system dependent statistics, as it no longer seems to be maintained. Instead, we rely on the statistics provided by the JVM. This has resulted in a number of changes to the node info, and node stats responses:
+
+---------------------------------------------------------------------------------------
+network.* has been removed from nodes info and nodes stats.
+fs.*.dev and fs.*.disk* have been removed from nodes stats.
+os.* has been removed from nodes stats, except for os.timestamp, os.load_average, os.mem.*, and os.swap.*.
+os.mem.total and os.swap.total have been removed from nodes info.
+process.mem.resident and process.mem.share have been removed from node stats.
+------------------------------------------------------------------------------------------
+
+15.2 Removed id_cache from stats apis
+Removed id_cache metric from nodes stats, indices stats and cluster stats apis. This metric has also been removed from the shards cat, indices cat and nodes cat apis. Parent/child memory is now reported under fielddata, because it has internally been using fielddata for a while now.
+
+To just see how much parent/child related field data is taking, the fielddata_fields option can be used on the stats apis. Indices stats example:
+
+GET /_stats/fielddata?fielddata_fields=_parent
+
+15.3 Percolator stats
+The total time spent running percolator queries is now called percolate.time instead of percolate.get_time.
+
+15.4 Cluster state REST API
+The cluster state API doesn’t return the routing_nodes section anymore when routing_table is requested. The newly introduced routing_nodes flag can be used separately to control whether routing_nodes should be returned.
+
+15.5 Index status API
+The deprecated index status API has been removed.
+
+15.6 Nodes Stats API
+Queue lengths are now reported as basic numeric so they can easily processed by code. Before we used a human readable format. For example, a queue with 1,000 items is now reported as 1000 instead of 1k.
+
+
+############################################## 16.Java API changes #######################################################
+16.1 Transport API construction
+The TransportClient construction code has changed, it now uses the builder pattern. Instead of:
+
+--------------------------------------------------------
+Settings settings = Settings.settingsBuilder()        --
+        .put("cluster.name", "myClusterName").build();
+Client client = new TransportClient(settings);
+---------------------------------------------------------
+Use the following:
+------------------------------------------------------------------
+Settings settings = Settings.settingsBuilder()
+        .put("cluster.name", "myClusterName").build();
+Client client = TransportClient.builder().settings(settings).build();
+--------------------------------------------------------------------
+
+The transport client also no longer supports loading settings from config files. If you have a config file, you can load it into settings yourself before constructing the transport client:
+
+Settings settings = Settings.settingsBuilder()
+        .loadFromPath(pathToYourSettingsFile).build();
+Client client = TransportClient.builder().settings(settings).build();
+
+
+16.2 Exception are only thrown on total failure
+Previously, many APIs would throw an exception if any shard failed to execute the request. Now the exception is only thrown if all shards fail the request. The responses for these APIs will always have a getShardFailures method that you can and should check for failures.
+
+16.3 IndexMissingException removed
+Use IndexNotFoundException instead.
+
+16.4 Automatically thread client listeners
+Previously, the user had to set request listener threads to true when on the client side in order not to block IO threads on heavy operations. This proved to be very trappy for users, and ended up creating problems that are very hard to debug.
+In 2.0, Elasticsearch automatically threads listeners that are used from the client when the client is a node client or a transport client. Threading can no longer be manually set.
+
+16.5 Query/filter refactoring
+org.elasticsearch.index.queries.FilterBuilders has been removed as part of the merge of queries and filters. These filters are now available in QueryBuilders with the same name. All methods that used to accept a FilterBuilder now accept a QueryBuilder instead.
+In addition some query builders have been removed or renamed:
+
+commonTerms(...) renamed with commonTermsQuery(...)
+queryString(...) renamed with queryStringQuery(...)
+simpleQueryString(...) renamed with simpleQueryStringQuery(...)
+textPhrase(...) removed
+textPhrasePrefix(...) removed
+textPhrasePrefixQuery(...) removed
+filtered(...) removed. Use filteredQuery(...) instead.
+inQuery(...) removed. Use termsQuery(...) instead.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
