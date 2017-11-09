@@ -16,7 +16,6 @@
     <url-pattern>/test</url-pattern>
   </servlet-mapping>
 
-
   <servlet>
     <servlet-name>zip</servlet-name>
     <servlet-class>com.ylch.test.ZipServlet</servlet-class>
@@ -26,5 +25,15 @@
     <servlet-name>zip</servlet-name>
     <url-pattern>/zip</url-pattern>
   </servlet-mapping>
-  
+
+  <servlet>
+    <servlet-name>csv</servlet-name>
+    <servlet-class>com.ylch.test.CsvServlet</servlet-class>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>csv</servlet-name>
+    <url-pattern>/csv</url-pattern>
+  </servlet-mapping>
+
 </web-app>

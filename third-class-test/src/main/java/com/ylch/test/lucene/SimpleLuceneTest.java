@@ -47,12 +47,28 @@ public class SimpleLuceneTest {
         Path path = Paths.get(index_dir);
         Directory directorty = FSDirectory.open(path);
        //new IndexReader()
-
-
-
-
     }
 
+
+    @Test
+    public void test3() throws IOException {
+        Analyzer analyzer = new StandardAnalyzer();
+        Path path = Paths.get(index_dir);
+        Directory directorty = FSDirectory.open(path);
+        IndexWriterConfig config = new IndexWriterConfig(analyzer);
+        config.setInfoStream(System.out);
+        IndexWriter writer = new IndexWriter(directorty, config);
+        ;
+        Document doc = new Document();
+        StringField id = new StringField("id", "1", Field.Store.YES);
+        TextField textField = new TextField("name", "中国我是", Field.Store.YES);
+        doc.add(id);
+        doc.add(textField);
+
+        //writer.updateDocument();
+        //writer.commit();
+        writer.close();
+    }
 
 
 

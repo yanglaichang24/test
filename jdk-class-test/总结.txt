@@ -1,0 +1,274 @@
+1、jdk自带线程池为什么先入队列，后创建非核心线程？
+因为队列增加一个元素的成本更低。
+2、内部类引用外部类方法的局部变量，为什么必须使用final修饰？
+因为外部类方法的变量运行完毕就会回收，但加载的内部类可能仍然存在。
+3、方法的签名包括方法名和参数列表，为什么不包括返回值？
+因为调用端可以不接收返回值，此种情况就无法判断具体是哪个方法。
+4、Spring的线程池工具ThreadPoolTaskExecutor，也是基于JDK的ThreadPoolExecutor实现，它有什么好处、陷阱？
+好处：参数、单例可配置，队列、拒绝策略有默认。缺点：错过了解底层的机会，直接使用ThreadPoolExecutor也不难。
+5、有哪些令人眼花缭乱的锁？
+自旋、阻塞、重入、读写、乐观、悲观、偏向、轻量级、重量级，共享锁、排他锁、行锁、表锁、间隙锁、意向锁。
+6、状态模式与策略模式有什么区别？
+结构上看，没有区别。
+目的上看，
+       状态模式由一组状态驱动，用于处理状态的变化；
+       策略模式由一组算法驱动，用于处理算法的变化。
+具体来说，
+       策略模式中，算法是否变化完全由客户端决定，而且一般一次只能选择一种算法，不存在中途变化的情况；
+       状态模式中，状态本身存在线性的生命周期，是否变化由具体状态内部决定，这种变化对客户端是透明的。
+7、HashMap.put(key, value)的执行过程。
+       计算key的哈希值。
+       计算哈希值在数组中的位置。
+       若该key已存在，则替换掉旧值。
+       否则，在该位置添加新的节点。
+       最后检查是否需要扩容。
+8、HashMap何时扩容？怎么扩容？数据迁移？
+何时扩容？
+       put的最有一步，若size>=threshold（capcity*loadFactor），则进行扩容。
+怎么扩容？
+       创建一个新数组，容量=旧数组容量*2。
+       将旧数组中的数据，迁移到新数组。
+       将HashMap的底层数组指向新数组。
+       重新计算threshold。
+数据迁移？
+       遍历旧数组。
+       针对每个数组成员，从头开始遍历链表。
+       针对每个链表节点，重新计算哈希值，以及该哈希值在新数组中的位置。
+       将当前节点的next，指向新数组中该位置的节点。
+       将新数组中该位置，指向当前节点。
+       以上过程造成了两种后果：
+              若重新哈希后没有冲突，直接存放为数组元素；
+              若重新哈希后仍有冲突，新链表的顺序与原来相反。
+9、HashMap.get(key)多线程环境下，CPU飙到100%。
+根本原因，在HashMap扩容，数据迁移的时候，出现了环状链表结构。
+相关代码：
+       void transfer(Entry[] newTable)
+       {
+              Entry[] src = table;
+              int newCapacity = newTable.length;
+              // 下面这段代码的意思是：
+              // 从OldTable里摘一个元素出来，然后放到NewTable中
+              for (int j = 0; j < src.length; j++) {
+                     Entry<K,V> e = src[j];
+                     if (e != null) {
+                            src[j] = null;
+                            do {
+                                   Entry<K,V> next = e.next; // 线程一在这里挂起
+                                   int i = indexFor(e.hash, newCapacity);
+                                   e.next = newTable[i];
+                                   newTable[i] = e;
+                                   e = next;
+                            } while (e != null);
+                     }
+              }
+       }
+形成过程：
+       为了便于分析问题，假定链表长度为2，头结点为node1，尾节点为node2。
+       第一阶段->线程1->第1次循环->上半场。
+              创建数组a，遍历旧链表，第1个语句，之后当前线程挂起；
+              此时情况，持有两个引用，e指向头结点（node1），next指向尾节点（node2），即e.next。
+       第二阶段->线程2。
+              创建数组b，遍历旧链表，完毕之后，新链表的顺序与原来相反。
+              此时情况，node1变成了尾节点，node2变成了头结点。
+              b[i]=node2，node2.next=node1，node1.next=null。
+       第三阶段->线程1->第1次循环->下半场。
+              初始情况，e指向尾节点（node1），next指向头结点（node2）。
+              第2个语句，计算尾节点e（node1）的数组下标i。
+              第3个语句，尾节点e（node1）的next（e.next），指向a[i]（此时为null）。
+              第4个语句，a[i]指向尾节点e（node1）。
+              第5个语句，e指向头结点next（node2）。
+              此时情况，a[i]指向尾节点（node1），e指向头结点（node2），next也指向头结点（node2）。
+              a[i]=node1，node1.next=null，b[i]=node2，node2.next=node1。
+       第四阶段->线程1->第2次循环。
+              第1个语句，next指向尾节点（node1）。
+              第2个语句，计算头结点e（node2）的数组下标i。
+              第3个语句，头结点e（node2）的next（e.next），指向a[i]（此时为node1），相当于node2.next=node1。（没有任何效果）
+              第4个语句，a[i]指向头结点e（node2）。
+              第5个语句，e指向尾节点next（node1）。
+              此时情况，a[i]指向头节点（node2），e指向尾结点（node1）。
+              a[i]=node2，node2.next=node1，node1.next=null，b[i]=node2。
+       第五阶段->线程1->第3次循环。
+              第1个语句，next指向null。
+              第2个语句，计算尾结点e（node1）的数组下标i。
+              第3个语句，尾结点e（node1）的next（e.next），指向a[i]（此时为node2），即node1.next=node2。
+       总结。
+              第四阶段，node2.next=node1。
+              第五阶段，node1.next=node2。
+              由此环路形成。
+10、HashSet.toString()多线程环境下，出现内存溢出。
+两个原因，
+       HashSet基于HashMap实现，多线程环境下，出现了环状链表结构。
+       HashSet.toString拼装StringBuilder时，遍历上述结构，陷入死循环。
+11、两阶段提交和三阶段提交。
+两阶段提交：
+       第一阶段，投票+预提交（各就各位+预备）；
+       第二阶段，提交（走你）。
+三阶段提交：
+       第一阶段，投票（各就各位）；
+       第二阶段，预提交（预备）；
+       第三阶段，提交（走你）。
+12、JDK6、JDK7、JDK8，常量池、方法区（永久代）、元空间。
+       JDK6，常量池位于方法区，又叫永久代，配置参数-XX:PermSize、-XX:MaxPermSize。
+       JDK7，常量池位于堆内存。
+       JDK8，彻底去掉了方法区，取而代之的是元空间，配置参数-XX:MetaspaceSize、-XX:MaxMetaspaceSize。
+13、TLAB是什么？它位于堆内存，还是栈内存？
+       TLAB全称Thread Local Allocation Buffer，即线程本地分配缓冲区，位于堆内存中的EDEN区，由线程独享。
+14、对象可以直接分配在栈内存吗？
+       开启逃逸分析-XX:+DoEscapeAnalysis
+       开启标量替换-XX:+EliminateAllocations
+       小于栈内存-Xss
+15、JVM线上问题分类排查。
+CPU问题。
+       死循环：查看系统负载，排查方法：top/top H/top -Hp pid。
+       线程阻塞：查看线程栈，排查方法：jstack pid。
+       频繁GC：查看GC情况，排查方法：jstat -gcutil pid。
+内存类问题。
+       堆内存：OutOfMemoryError:java heap space，排查方法：集合、缓存、多线程、大对象、jmap –heap、jmap –histo、jmap -dump:format=b,file=xxx.hprof。
+       栈内存：
+              StackOverflowError，排查方法：栈深度过大、递归死循环等；
+              OutOfMemoryError:unable to create new native thread，排查方法：线程数量过多、物理内存不足、超过系统限制。
+       方法区：OutOfMemoryError:PermGen space，排查方法：XX:MaxPermSize、class/jar过多、重复加载、动态代理。
+       直接内存：OutOfMemoryError，排查方法：Java Native Interface、java.nio.DirectByteBuffer等。
+IO类问题。
+       磁盘IO。
+       网络IO。
+16、栈内存什么情况下StackOverflowError，什么情况下OutOfMemoryError？
+       单个线程的栈帧太大，抛出StackOverflowError。
+       创建的线程数量过多，抛出OutOfMemoryError。
+17、强引用、软应用、弱引用、虚引用。
+       强引用，诸如Object obj = new Object()，永远不会垃圾回收。
+       软引用，诸如SoftReference reference = new SoftReference(obj)，在内存溢出之前，进行二次回收。
+       弱引用，诸如WeakReference reference = new WeakReference(obj)，下一次垃圾回收时进行回收。
+       虚引用，诸如PhantomReference reference = new PhantomReference(obj)，对垃圾回收无任何影响，也无法通过虚引用取得对象，它存在的唯一目的，就是对象被回收时，收到一个系统通知。
+18、判定对象是否应该被回收，引用计数器 OR 可达性分析？
+       答案是可达性分析，因为引用计数器无法解决循环引用的问题。
+       可达性分析是指，从对象到GC Roots没有任何引用链相连接。
+       GC Roots包含，虚拟机栈和本地方法栈中引用的对象，方法区中静态成员变量和常量引用的对象。
+19、对象被判定为不可达后，是否非死不可？
+       答案是NO。
+       标记对象是否有必要执行finalize方法（对象覆盖了finalize方法，且未执行过，表示有必要执行）
+       若无必要执行，则进行回收。
+       创建的线程数量过多，抛出OutOfMemoryError。
+       若有必要执行，则登记ReferenceQueue队列，启动Finalizer线程，执行finalize方法。
+       若finalize方法中把对象复活，则对象不进行回收，否则进行回收。
+       以上复活的机会只有一次，下一次finalize方法不再执行
+20、CPU负载飙高甚至达到100%，如何排查？
+       第一步，找到CPU负载最高的进程pid：top/top -c
+       第二步，找到CPU负载最高的线程pid：top -Hp pid。
+       第三步，线程pid转换为十六进制：printf '%x\n' pid。
+       第四步，找到Java堆栈信息：jstack 进程pid | grep 线程pid十六进制 -C10 --color。
+       第五步，定位到线程信息和问题代码。
+21、JVM参数-XX:+DisableExplicitGC、-XX:+ExplicitGCInvokesConcurrent的含义。
+       -XX:+DisableExplicitGC，禁用System.gc()显式调用GC。
+       -XX:+ExplicitGCInvokesConcurrent，启用并行的FullGC。
+       常与堆外直接内存配合使用。（？）
+22、什么是堆外内存？
+       狭义的堆外内存，通过java.nio.DirectByteBuffer分配的内存，通过JVM参数-XX:MaxDirectMemorySize指定大小。
+       若未指定，则默认=新生代+老生代-survivor=-Xmx-survivor。
+       广义的堆外内存，堆之外的所有内存，包含程序计数器、虚拟机栈、本地方法栈、直接内存。
+       注意：对于HotSpot，Java6/Java7的方法区又叫永久代，与堆内存一起分配和管理，因此属于堆内存的一部分。
+       对于频繁操作内存，只需临时存储的场景，建议使用堆外内存，并且做成缓冲池，便于重复利用。
+23、使用堆外内存，为什么显式调用GC？
+       DirectByteBuffer对象创建的时候，关联PhantomReference用于对象跟踪，创建sun.misc.Cleaner用于对象回收。（Unsafe的free接口。）
+       GC过程中，若发现对象只被PhantomReference引用，则该引用登记到java.lang.ref.Reference.pending队列。
+       GC完毕后，通知ReferenceHandler守护线程进行后置处理，若pending队列为空，则线程阻塞，否则进行遍历。
+       若Reference类型为Cleaner，则调用Cleaner.clean()，否则登记ReferenceQueue队列，可以用于对象的复活。（类似于finalizer）
+24、JVM监控小工具jstat。
+       jstat -gc pid——S0C、S1C、S0U、S1U、EC、EU、OC、OU、PC、PU、YGC、YGCT、FGC、FGCT、GCT
+       jstat -gcutil pid——S0、S1、E、O、P、YGC、YGCT、FGC、FGCT、GCT。
+       jstat -gccapacity pid。
+       jstat -gccause pid。
+25、-XX:+DisableExplicitGC，关闭System.gc()，亦即禁止手动触发STW的FGC。
+26、-XX:+ExplicitGCInvokesConcurrent，YGC+部分OGC，性能比Full GC要好，STW时间变短，后台回收。
+27、JVM对象分配流程。
+       第一步，尝试栈上分配，成功条件：-XX:+DoEscapeAnalysis && -XX:+EliminateAllocations && 小于-Xss（默认1MB，-XX:ThreadStackSize？）。
+       第二步，尝试TLAB分配，成功条件：-XX:+UseTLAB || 小于-XX:TLABRefillWasteFraction。
+       第三步，尝试老年代分配，成功条件：大于-XX:MaxTenuringThreshold || 大于-XX:PretenureSizeThreshold。
+       第四步，进行新生代分配。
+28、FinalizerThread执行队列。
+       回收前加入java.lang.ref.ReferenceQueue引用队列。
+       引用队列的每一项为java.lang.ref.Finalizer。
+       Finalizer的referent指向实际的对象引用java.lang.ref.Reference。
+       此处为强引用，无法正常进行回收。
+29、FinalizerThread工作过程。
+       方法finalize()由FinalizerThread线程处理。
+       FinalizerThread线程遍历引用队列，排队执行finalize()方法。
+       每执行完一个finalize()方法，移除相应元素，后续走正常回收流程。
+       未执行完的对象不能回收，因为存在强引用。
+30、Finalizer机制的实际应用。
+       资源回收，例如com.mysql.jdbc.ConnectionImpl.finalize()，回收前关闭连接。
+31、JVM垃圾回收器算法。
+       引用计数算法，用于标记对象，不是实际采用。
+       可达性分析算法，用于标记对象，是实际采用。
+       标记清除算法，用于清理对象，作用于老年代。
+       标记整理算法，用于清理对象，作用于老年代。
+       复制算法，用于清理对象，作用于新生代。
+       分代算法，堆内存，新生代，老年代，永久代。
+       分区算法，新生代，Eden区，S1区，S2区。
+32、JVM垃圾回收器实现。Young、Tenured、Permanent。
+       新生代-Serial，复制算法，独占式串行回收器。
+       新生代-ParNew，复制算法，独占式并行回收器，新生代-Serial的多线程版。
+       新生代-Parallel Scavenge，复制算法，并发回收器，关注吞吐量。
+       老年代-Serial Old，标记整理算法，独占式串行回收器.
+       老年代-CMS，标记清除算法，并发回收器，关注STW停顿时间。
+       老年代-Parallel Old，标记整理算法，并发回收器，关注吞吐量。
+       新生代+老年代-G1，比较复杂。
+33、JVM垃圾回收器搭配。
+       搭配A：老年代-Serial Old->新生代-Serial。（-XX:+UseSerialGC）
+       搭配B：老年代-Serial Old->新生代-ParNew。（-XX:+UseParNewGC）
+       搭配C：老年代-Serial Old->新生代-Parallel Scavenge。（-XX:+UseParallelGC）
+       搭配D：老年代-CMS->新生代-Serial，内存不足，转为A。（-XX:+UseConcMarkSweepGC、-XX:+UseSerialGC）
+       搭配E：老年代-CMS->新生代-ParNew，内存不足，转为B。（-XX:+UseConcMarkSweepGC）
+       搭配F：老年代-Parallel Old->新生代-Parallel Scavenge。（-XX:+UseParallelOldGC）
+       搭配G：老年代-G1->新生代-G1。（-XX:+UseG1GC）
+34、GC太慢引起的的OOM。
+       异常信息提示：java.lang.OutOfMemoryError: GC overhead limit exceeded。
+       关闭这个提示：-XX:-UseGCOverheadLimit。
+       A、GC时间超过98%。
+       B、老年代释放内存小于2%。
+       C、eden区释放内存小于2%。
+35、JVM常用配置参数缩写。
+       最大堆内存大小，-Xmx1G，等效于-XX:MaxHeapSize=1G。
+       初始堆内存大小，-Xms1G，等效于-XX:InitialHeapSize=1G。
+       新生代大小，-Xmn1G，等效于-XX:NewSize=1G -XX:MaxNewSize=1G。
+       线程栈大小，-Xss1M，等效于-XX:ThreadStackSize=1M。
+36、Java字符串的特点，不变性。
+       提升效率和安全，多线程安全，防止被篡改，实现常量池。
+37、Java字符串的特点，常量池。
+       节省内存空间。
+38、Java字符串的特点，final。
+       提升安全。
+       方法内联。
+39、Java字符串内存泄露的原因。
+       JDK1.6字符串的实现机制：字符数组char[] value、偏移量int offset、长度int count。
+       优点：与原字符串共用value节省内存。
+       缺陷：value中多余的部分不会被回收。
+       JDK1.7字符串的实现机制：字符数组char[] value、长度value.length。
+       异常信息提示
+40、Java字符串常量池的位置。
+       JDK1.6：位于方法区。
+       JDK1.7：位于堆内存。
+       字符串常量被回收，之后又被重新载入，位置已经产生变化。
+41、保留集、浅堆、深堆、实际大小。
+       保留集，只被对象直接或间接引用的其它对象的集合。
+       浅堆大小，基本数据类型大小+引用本身大小+对象头大小。
+       深堆大小，保留集中所有对象的浅堆大小之和。
+       实际大小，能被对象直接或间接引用的所有对象的浅堆大小之和。
+       实际大小>深堆>浅堆。
+42、对象标记字（Object Mark Word）。
+       无锁状态，【25位哈希】【4位年龄】【1位偏向锁状态：0】【2位锁状态：01】。
+       偏向锁状态，【23位线程名称】【2位时间戳】【4位年龄】【1位偏向锁状态：1】【2位锁状态：01】。
+       轻量级锁状态，【30位线程栈置换标记字指针】【2位锁状态：00】。
+       重量级锁状态，【30位互斥Monitor指针】【2位锁状态：10】。
+43、。
+       异常信息提示
+       异常信息提示
+       异常信息提示
+44、。
+       异常信息提示
+       异常信息提示
+       异常信息提示
+45、。
+       异常信息提示
+       异常信息提示
+       异常信息提示

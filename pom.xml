@@ -22,5 +22,10 @@
         <module>netty</module>
         <module>secutiry_test</module>
         <module>spring-test</module>
+        <module>apche-commons</module>
+        <module>elasticsearch</module>
+        <module>guice</module>
+        <module>third-class-test</module>
+        <module>hppcTest</module>
     </modules>
 </project>

@@ -25,3 +25,4 @@ jdk-class-test/src/test/
 netty/netty.iml
 netty/src/
 secutiry_test/security.iml
+elasticsearch/elasticsearch.iml
