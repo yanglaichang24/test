@@ -35,8 +35,9 @@ import java.util.concurrent.TimeUnit;
  @See PriorityQueue,
  @See SynchronousQueue
 
-
-        抛出异常	返回特殊值
+ ----------------------------------------
+  \      抛出异常	|返回特殊值
+ ----------------------------------------
  插入	add(e)	    offer(e)
  移除	remove()	poll()
  检查	element()	peek()

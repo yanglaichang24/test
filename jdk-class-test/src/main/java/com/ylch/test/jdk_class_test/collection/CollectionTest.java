@@ -195,6 +195,36 @@ public class CollectionTest {
         //unmodifiableSortedMap
     }
 
+    @Test
+    public void testJDKImmutable(){
+        List<String> list=new ArrayList<String>();
+        list.add("a");
+        list.add("b");
+        list.add("c");
+
+        System.out.println(" 【1】 " + list);
+        List<String> unmodifiableList=Collections.unmodifiableList(list);
+        System.out.println(" 【2】 " + unmodifiableList);
+        List<String> unmodifiableList1=Collections.unmodifiableList(Arrays.asList("a","b","c"));
+        System.out.println(" 【3】 " + unmodifiableList1);
+
+
+
+        String temp=unmodifiableList.get(1);
+        System.out.println(" 【4】 " + "unmodifiableList [0]："+temp);
+
+        list.add("baby");
+        System.out.println(" 【5】 " + "list add a item after list:"+list);
+        System.out.println(" 【6】 " + "list add a item after unmodifiableList:"+unmodifiableList);
+
+        unmodifiableList1.add("bb");
+        System.out.println(" 【7】 " + "unmodifiableList add a item after list:"+unmodifiableList1);
+
+        unmodifiableList.add("cc");
+        System.out.println(" 【8】 " + "unmodifiableList add a item after list:"+unmodifiableList);
+    }
+
+
     /**
      *  返回指定 collection 的一个动态类型安全视图。
      *  试图插入一个错误类型的元素将导致立即抛出 ClassCastException,

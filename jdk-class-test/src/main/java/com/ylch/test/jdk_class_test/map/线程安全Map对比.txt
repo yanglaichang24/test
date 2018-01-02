@@ -1,0 +1,5 @@
+Collections.synchronizedMap
+SynchronizedMap 继承map ,默认以this 作为synchronized(this)加锁
+
+ConcurrentHashMap 使用 Segment(段)
+Segment<K,V> extends ReentrantLock

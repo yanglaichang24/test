@@ -1,0 +1,48 @@
+在做项目的过程中，由于写SQL太过随意，一不小心就抛了一个死锁异常，如下：
+com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException: Deadlock found when trying to get lock; try restarting transaction
+        at sun.reflect.GeneratedConstructorAccessor247.newInstance(Unknown Source)
+        at sun.reflect.DelegatingConstructorAccessorImpl.newInstance(DelegatingConstructorAccessorImpl.java:27)
+        at java.lang.reflect.Constructor.newInstance(Constructor.java:513)
+        at com.mysql.jdbc.Util.handleNewInstance(Util.java:406)
+        at com.mysql.jdbc.Util.getInstance(Util.java:381)
+        at com.mysql.jdbc.SQLError.createSQLException(SQLError.java:1045)
+        at com.mysql.jdbc.SQLError.createSQLException(SQLError.java:956)
+        at com.mysql.jdbc.MysqlIO.checkErrorPacket(MysqlIO.java:3491)
+        at com.mysql.jdbc.MysqlIO.checkErrorPacket(MysqlIO.java:3423)
+        at com.mysql.jdbc.MysqlIO.sendCommand(MysqlIO.java:1936)
+        at com.mysql.jdbc.MysqlIO.sqlQueryDirect(MysqlIO.java:2060)
+        at com.mysql.jdbc.ConnectionImpl.execSQL(ConnectionImpl.java:2542)
+        at com.mysql.jdbc.PreparedStatement.executeInternal(PreparedStatement.java:1734)
+        at com.mysql.jdbc.PreparedStatement.executeUpdate(PreparedStatement.java:2019)
+        at com.mysql.jdbc.PreparedStatement.executeUpdate(PreparedStatement.java:1937)
+        at com.mysql.jdbc.PreparedStatement.executeUpdate(PreparedStatement.java:1922)
+
+表结构如下：
+   CREATE TABLE `user_item` (
+     `id` BIGINT(20) NOT NULL,
+     `user_id` BIGINT(20) NOT NULL,
+     `item_id` BIGINT(20) NOT NULL,
+     `status` TINYINT(4) NOT NULL,
+     PRIMARY KEY (`id`),
+     KEY `idx_1` (`user_id`,`item_id`,`status`)
+   ) ENGINE=INNODB DEFAULT CHARSET=utf-8
+
+SQL语句如下：
+update user_item set status=1 where user_id=? and item_id=?
+原因分析
+mysql的事务支持与存储引擎有关，MyISAM不支持事务，INNODB支持事务，更新时采用的是行级锁。这里采用的是INNODB做存储引擎，意味着会将update语句做为一个事务来处理。前面提到行级锁必须建立在索引的基础，这条更新语句用到了索引idx_1，所以这里肯定会加上行级锁。
+行级锁并不是直接锁记录，而是锁索引，如果一条SQL语句用到了主键索引，mysql会锁住主键索引；如果一条语句操作了非主键索引，mysql会先锁住非主键索引，再锁定主键索引。
+这个update语句会执行以下步骤：
+1、由于用到了非主键索引，首先需要获取idx_1上的行级锁
+2、紧接着根据主键进行更新，所以需要获取主键上的行级锁；
+3、更新完毕后，提交，并释放所有锁。
+如果在步骤1和2之间突然插入一条语句：update user_item .....where id=? and user_id=?,这条语句会先锁住主键索引，然后锁住idx_1。
+蛋疼的情况出现了，一条语句获取了idx_1上的锁，等待主键索引上的锁；另一条语句获取了主键上的锁，等待idx_1上的锁，这样就出现了死锁。
+
+
+小结：在采用INNODB的MySQL中，更新操作默认会加行级锁，
+行级锁是基于索引的，在分析死锁之前需要查询一下mysql的执行计划，
+看看是否用到了索引，用到了哪个索引，对于没有用索引的操作会采用表级锁。
+如果操作用到了主键索引会先在主键索引上加锁，然后在其他索引上加锁，
+否则加锁顺序相反。在并发度高的应用中，批量更新一定要带上记录的主键，
+优先获取主键上的锁，这样可以减少死锁的发生。

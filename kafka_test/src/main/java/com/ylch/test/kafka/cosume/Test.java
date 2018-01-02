@@ -38,7 +38,7 @@ public class Test {
             Map<String, List<KafkaStream<byte[], byte[]>>> messageStreams = javaConsumerConnector.createMessageStreams(hashMap);
             List<KafkaStream<byte[], byte[]>> streams = messageStreams.get("test_topic");
 
-         ExecutorService executor =   Executors.newFixedThreadPool(2);
+         ExecutorService executor =   Executors.newFixedThreadPool(1);
         for (final KafkaStream stream : streams) {
             executor.submit(new Thread() {
                 @Override

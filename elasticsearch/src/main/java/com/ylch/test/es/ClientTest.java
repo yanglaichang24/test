@@ -1,10 +1,7 @@
 package com.ylch.test.es;
 
-import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsRequest;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsResponse;
-import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
-import org.elasticsearch.client.Client;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -25,16 +22,18 @@ public class ClientTest {
     public TransportClient getClient() throws UnknownHostException {
         Settings settings = Settings.settingsBuilder().put("cluster.name", "yanglaichang").build();
         TransportClient client = TransportClient.builder().settings(settings).build();
-        client.addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("localhost"), Integer.valueOf(9300)));
+        InetSocketTransportAddress localhost = new InetSocketTransportAddress(InetAddress.getByName("localhost"), Integer.valueOf(9300));
+        InetSocketTransportAddress test01 = new InetSocketTransportAddress(InetAddress.getByName("test01"), Integer.valueOf(9300));
+        client.addTransportAddresses(localhost, test01);
         return client;
     }
 
     @Test
     public void testclient() throws UnknownHostException {
         TransportClient client = getClient();
-        ClusterStatsRequest clusterStatsRequest = new ClusterStatsRequest();
-        ClusterStatsResponse clusterStatsNodeResponses = client.admin().cluster().clusterStats(clusterStatsRequest).actionGet(5, TimeUnit.MINUTES);
-        System.out.println(clusterStatsNodeResponses);
+        //ClusterStatsRequest clusterStatsRequest = new ClusterStatsRequest();
+        //ClusterStatsResponse clusterStatsNodeResponses = client.admin().cluster().clusterStats(clusterStatsRequest).actionGet(5, TimeUnit.MINUTES);
+        //System.out.println(clusterStatsNodeResponses);
 
     }
 
@@ -64,10 +63,30 @@ public class ClientTest {
     @Test
     public void index() throws UnknownHostException {
         TransportClient client = getClient();
-        boolean test = client.admin().indices().create(Requests.createIndexRequest("test")).actionGet(5, TimeUnit.MINUTES).isAcknowledged();
+        Settings.Builder builder = Settings.settingsBuilder();
+        boolean test = client.admin().indices().create(
+                Requests.createIndexRequest("test2")
+
+              ).actionGet(5, TimeUnit.MINUTES).isAcknowledged();
         System.out.println("test : "+test);
 
     }
+
+    @Test
+    public void mapping() throws UnknownHostException {
+        TransportClient client = getClient();
+        boolean test = client.admin().indices().putMapping(Requests.putMappingRequest("test").type("test").source("")).actionGet(5, TimeUnit.MINUTES).isAcknowledged();
+        System.out.println("test : "+test);
+    }
+
+    @Test
+    public void deleteIndex() throws UnknownHostException {
+        TransportClient client = getClient();
+        boolean test = client.admin().indices().delete(Requests.deleteIndexRequest("test")).actionGet(5, TimeUnit.MINUTES).isAcknowledged();
+        System.out.println("test : "+test);
+    }
+
+
 
 
 
