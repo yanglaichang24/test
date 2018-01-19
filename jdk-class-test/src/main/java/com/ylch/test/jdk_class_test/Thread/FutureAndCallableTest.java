@@ -12,7 +12,7 @@ public class FutureAndCallableTest {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
         Callable<String> callable = new Callable<String>() {
             public String call() throws Exception {
-                Thread.sleep(1000);
+                Thread.sleep(1000000);
                 return "ylc";
             }
         };
@@ -21,6 +21,7 @@ public class FutureAndCallableTest {
         new Thread(stringFutureTask).start();
 
         System.out.println(stringFutureTask.get());
+        //System.out.println(stringFutureTask.get());
     }
 
 }

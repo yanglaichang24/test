@@ -8,6 +8,9 @@
                  http://www.jd.com/schema/spring-test-schema.xsd"
              default-autowire="byName">
 
-    <ylc:service id="test" userName="ylch" email="111"/>
-    <ylc:controller id="test2" userName="ylch3232" email="1112222"/>
+    <ylc:service id="test2" userName="ylchb" email="1113"/>
+
+    <ylc:service id="test" userName="ylch" email="111"  ref="test2"/>
+
+  <!--  <ylc:controller id="test2" userName="ylch3232" email="1112222"/>-->
 </beans:beans>

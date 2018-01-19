@@ -31,6 +31,7 @@ public class XmlBeanDefinitionParser extends AbstractSingleBeanDefinitionParser 
         if (StringUtils.hasText(email)){
             builder.addPropertyValue("telephone",email);
         }
+
     }
 
 

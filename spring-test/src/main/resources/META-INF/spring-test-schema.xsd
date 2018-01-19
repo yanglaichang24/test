@@ -12,6 +12,7 @@
             <xsd:attribute name="id" type="xsd:ID" use="required"/>
             <xsd:attribute name="userName" type="xsd:string"/>
             <xsd:attribute name="email" type="xsd:string" />
+            <xsd:attribute name="ref" type="xsd:string" />
         </xsd:complexType>
     </xsd:element>
 
