@@ -34,7 +34,7 @@ public class Test {
             ConsumerConfig consumerConfig = new ConsumerConfig(props);
             ConsumerConnector javaConsumerConnector = Consumer.createJavaConsumerConnector(consumerConfig);
             Map hashMap = new HashMap();
-            hashMap.put("test_topic",2);
+            hashMap.put("test_topic",1);
             Map<String, List<KafkaStream<byte[], byte[]>>> messageStreams = javaConsumerConnector.createMessageStreams(hashMap);
             List<KafkaStream<byte[], byte[]>> streams = messageStreams.get("test_topic");
 

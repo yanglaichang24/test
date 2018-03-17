@@ -1,0 +1,178 @@
+T  有类型
+
+?  未知类型
+
+一、通配符的上界
+
+既然知道List<Cat>并不是List<Anilmal>的子类型，那就需要去寻找替他解决的办法， 是AnimalTrianer.act()方法变得更为通用（既可以接受List<Animal>类型，也可以接受List<Cat>等参数）。在java里解决办法就是使用通配符“？”，具体到AnimalTrianer,就是将方法改为act(List<？ extends Animal> list),当中“？”就是通配符，而“？ extends Animal”则表示通配符“？”的上界为Animal，换句话说就是，“？ extends Animal”可以代表Animal或其子类，可代表不了Animal的父类（如Object），因为通配符的上界是Animal。如下，为改进之后的AnimalTrianer
+public class AnimalTrainer {
+	public void act(List<? extends Animal> list) {
+		for (Animal animal : list) {
+			animal.eat();
+		}
+	}
+}
+再来测试一下，如下，发现Test 2 可以通过编译了：
+public class TestAnimal {
+	public static void main(String[] args) {
+		AnimalTrainer animalTrainer = new AnimalTrainer();
+		//Test 1
+		List<Animal> animalList = new ArrayList<>();
+		animalList.add(new Cat("cat1"));
+		animalList.add(new Bird("bird1"));
+
+		animalTrainer.act(animalList);	//可以通过编译
+
+		//Test 2
+		List<Cat> catList = new ArrayList<>();
+		catList.add(new Cat("cat2"));
+		catList.add(new Cat("cat3"));
+
+		animalTrainer.act(catList);		//也可以通过编译
+	}
+}
+经过上述分析，可以知道List<Animal>和List<Cat>都是List<? extends Animal>的子类型，类似有List<Bird>,List<Magpie>也是List<? extends Animal>的子类型。
+现总结如下，对于通配符的上界，有以下几条基本规则：（假设给定的泛型类型为G，(如List<E>中的List),两个具体的泛型参数X、Y，当中Y是X的子类（如上的Animal和Cat））
+G<? extends Y> 是 G<? extends X>的子类型（如List<? extends Cat> 是 List<? extends Animal>的子类型）。
+G<X> 是 G<? extends X>的子类型（如List<Animal> 是 List<? extends Animal>的子类型）
+G<?> 与 G<? extends Object>等同，如List<?> 与List<? extends Objext>等同。
+
+学到这里，可能会遇到一些疑惑的地方，或者说事理解不透的地方，先观察如下两段代码片段，判断一下其是否可行？？
+public void testAdd(List<? extends Animal> list){
+		//....其他逻辑
+		list.add(new Animal("animal"));
+		list.add(new Bird("bird"));
+		list.add(new Cat("cat"));
+	}
+
+List<? extends Animal> list = new ArrayList<>();
+list.add(new Animal("animal"));
+list.add(new Bird("bird"));
+list.add(new Cat("cat"));
+先分析如下：因为“？ extends Animal”可代表Animal或其子类（Bird，Cat），那上面的操作应该是可行的。事实上是”不行“，即无法通过编译。为什么呢？？
+在解释之前，再来重新强调一下已经知道的规则：在List<Aimal> list里只能添加Animal类对象及其子类对象（如Cat和Bird对象），在List<Bird>里只能添加Bird类和其子类对象（如Magpie），可不能添加Animal对象（不是Bird的子类），类似的在List<Cat>和List<Magpie>里只能添加Cat和Bird对象（或其子类对象，不过这没有列出）。现在再回头看一下testAdd（）方法，我们知道List<Animal>、List<Cat等都是List<？ extends Animal>的子类型。先假设传入的参数为为List<Animal>,则第一段代码的三个“add”操作都是可行的；可如果是List<Bird>呢？？则只有第二个“add”可以执行；再假设传入的是List<Tiger>（Tiger是想象出来的，可认为是Cat的子类），则三个“add”操作都不能执行。
+现在反过来说，给testAdd传入不同的参数，三个“add”操作都可能引发类型不兼容问题，而传入的参数是未知的，所以java为了保护其类型一致，禁止向List<? extends Animal>添加任意对象，不过却可以添加null，即list.add(null)是可行的。有了上面谈到的基础，再来理解第二段代码就不难了，因为List<? extends Animal>的类型“？ extends Animal”无法确定，可以是Animal，Bird或者Cat等，所以为了保护其类型的一致性，也是不能往list添加任意对象的，不过却可以添加null。
+先总结如下：不能往List<? extends Animal> 添加任意对象，除了null。
+另外提醒大家注意的一点是，在List<? extends Animal> 可以是Animal类对象或Bird对象等（只是某一类对象），反过来说，在List<? extends Animal> list里的都是Animal对象，即Bird也是Animal对象，Cat也是Animal对象（用java的语言来说就是子类可以指向父类，父类却不能指向子类），那么在Animal里的所有方法都是可以调用的，如下：
+for (Animal animal : list) { animal.eat(); }
+
+二、通配符的下界
+
+既然有了通配符的上界，自然有着通配符的下界。可以如此定义通配符的下界 List<? super Bird>，其中”Bird“就是通配符的下界。注意：不能同时声明泛型通配符申明上界和下界。
+在谈注意细节之前，我们先看一下通配符的使用规则——对于通配符的上界，有以下几条基本规则：（假设给定的泛型类型为G，(如List<E>中的List),两个具体的泛型参数X、Y，当中Y是X的子类（如上的Animal和Cat））
+G<? super X> 是 G<? super Y>的子类型（如List<? super Animal> 是 List<? super Bird>的子类型）。
+G<X> 是 G<? super X>的子类型（如List<Animal> 是 List<? super Animal>的子类型）
+现在再来看如下代码，判断其是否符合逻辑：
+public void testAdd(List<? super Bird> list){
+		list.add(new Bird("bird"));
+		list.add(new Magpie("magpie"));
+	}
+List<? super Bird> list = new ArrayList<>();
+list.add(new Bird("bird"));
+list.add(new Magpie("magpie"));
+list.add(new Animal("animal"));
+看第一段代码，其分析如下，因为”? super Bird”代表了Bird或其父类，而Magpie是Bird的子类，所以上诉代码不可通过编译。而事实上是”行“，为什么呢？2？
+在解疑之前，再来强调一个知识点，子类可以指向父类，即Bird也是Animal对象。现在考虑传入到testAdd（）的所有可能的参数，可以是List<Bird>,List<Animal>,或者List<Objext>等等，发现这些参数的类型是Bird或其父类，那我们可以这样看，把bird、magpie看成Bird对象，也可以将bird、magpie看成Animal对象，类似的可看成Object对象，最后发现这些添加到List<? supe Bird> list里的对象都是同一类对象（如本文刚开篇提到的Test 1），因此testAdd方法是符合逻辑，可以通过编译的。：
+现在再来看一下第二段代码对于，第二、三行代码的解释和上文一样，至于最后一行“list.add(new Animal("animal"))”是无法通过编译的，为什么的？？为了保护类型的一致性，因为“？ super Bird”可以是Animal，也可以是Object或其他Bird的父类，因无法确定其类型，也就不能往List<? super Bird>添加Bird的任意父类对象。
+既然无法确定其父类对象，那该如何遍历List<? super Bird> ? 因为Object是所有类的根类,所以可以用Object来遍历。如下，不过貌似其意义不大。
+for (Object object : list) {//...}
+那“？ super BoundingType”可以应用在什么地方呢？？“？ super BoundingType”应用相对广泛，只不过是混合着用。下面举个简单的例子。先假设有以下两个Student和CollegeStudent，当中CollegeStudent继承Student，如下：
+public class Student implements Comparable<Student>{
+	private int id;
+
+	public Student(int id) {
+		this.id = id;
+	}
+
+	@Override
+	public int compareTo(Student o) {
+		return (id > o.id) ? 1 : ((id < o.id) ? -1 : 0);
+	}
+}
+
+public class CollegeStudent extends Student{
+	public CollegeStudent(int id) {
+		super(id);
+	}
+}
+
+先需要根据他们的id对他们进行排序（注意此处是对数组对象进行排序），设计方法如下，（n指数组元素的个数）：
+public static <T extends Comparable<? super T>>
+			void selectionSort(T[] a,int n)
+先理解此方法含义，首先<T extends Comparable<T>>规定了数组中对象必须实现Comparable接口，Comparable<? Super T>表示如果父类实现Comparable接口，其自身可不实现，如CollegeStudent。先假设有一个CollegeStudent的数组，如下：
+CollegeStudent[] stu = new CollegeStudent[]{
+   new CollegeStudent(3),new CollegeStudent(2),
+   new CollegeStudent(5),new CollegeStudent(4)};
+
+执行方法 selectionSort(stu,4)是完全可以通过的。可如果定义的selectionSort方法如下：
+public static <T extends Comparable<T>>
+			void selectionSort(T[] a,int n)
+则方法selectionSort(stu,4)不能执行,因为CollegeStudent没有实现Comparable<CollegeStudent>接口。换句话就是“？ super T”使selectionSort方法变得更为通用了。selectionSort完整代码的实现可参考本文的末尾。
+三、无界通配符
+
+知道了通配符的上界和下界，其实也等同于知道了无界通配符，不加任何修饰即可，单独一个“？”。如List<?>，“？”可以代表任意类型，“任意”也就是未知类型。无界通配符通常会用在下面两种情况：
+1、当方法是使用原始的Object类型作为参数时，如下：
+public static void printList(List<Object> list) {
+    for (Object elem : list)
+        System.out.println(elem + "");
+    System.out.println();
+}
+可以选择改为如下实现：
+public static void printList(List<?> list) {
+    for (Object elem: list)
+        System.out.print(elem + "");
+    System.out.println();
+}
+这样就可以兼容更多的输出，而不单纯是List<Object>,如下：
+List<Integer> li = Arrays.asList(1, 2, 3);
+List<String>  ls = Arrays.asList("one", "two", "three");
+printList(li);
+printList(ls);
+
+2、在定义的方法体的业务逻辑与泛型类型无关，如List.size,List.cleat。实际上，最常用的就是Class<?>,因为Class<T>并没有依赖于T。
+最后提醒一下的就是，List<Object>与List<?>并不等同，List<Object>是List<?>的子类。还有不能往List<?> list里添加任意对象，除了null。
+
+
+附录：selectionSort的代码实现：（如果需要实现比较好的输出，最好重写Student的toString方法）
+public class SortArray {
+
+	//对一组数组对象运用插入排序，n指数组元素的个数
+	public static <T extends Comparable<? super T>>
+					void selectionSort(T[] a,int n) {
+		for (int index = 0; index < n-1; index++) {
+			int indexOfSmallest = getIndexOfSmallest(a,index,n-1);
+			swap(a,index,indexOfSmallest);
+		}
+	}
+
+	public static <T extends Comparable<? super T>> int getIndexOfSmallest(T[] a, int first, int last) {
+		T minValue = a[first]; // 假设第一个为minValue
+		int indexOfMin = first; // 取得minValue的下标
+		for (int index = first + 1; index <= last; index++) {
+			if (a[index].compareTo(minValue) < 0) {
+				minValue = a[index];
+				indexOfMin = index;
+			}
+		}
+
+		return indexOfMin;
+	}
+
+	public static void swap(Object[] a,int first,int second) {
+		Object temp = a[first];
+		a[first] = a[second];
+		a[second] = temp;
+	}
+
+	public static void main(String[] args) {
+		CollegeStudent[] stu = new CollegeStudent[]{
+				new CollegeStudent(3),
+				new CollegeStudent(2),
+				new CollegeStudent(5),
+				new CollegeStudent(4)};
+		selectionSort(stu, 4);
+		for (Student student : stu) {
+			System.out.println(student);
+		}
+	}
+}

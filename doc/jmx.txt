@@ -1,0 +1,17 @@
+JMX（Java Management Extensions，即Java管理扩展）是一个为应用程序、设备、系统等植入管理功能的框架
+    JMX可以跨越一系列异构操作系统平台、系统体系结构和网络传输协议，
+灵活的开发无缝集成的系统、网络和服务管理应用
+常用于管理线程，内存，日志Level，服务重启，系统环境等
+
+
+基本术语
+ MBean 是Managed Bean的简称，可以翻译为“管理构件”。在JMX中MBean代表一个被管理的资源实例
+
+ MBeanServer
+
+ JMX Agent：
+
+ Protocol Adapters and Connectors
+
+
+

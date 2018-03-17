@@ -19,6 +19,7 @@ public class NioServerDemo {
   class NioServerHandler extends Thread {
 
       Selector select;
+
       ServerSocketChannel channel;
 
       public NioServerHandler(){
@@ -39,7 +40,7 @@ public class NioServerDemo {
              try {
                  execute();
              } catch (Exception e){
-
+                e.printStackTrace();
              }
          }
           /*try {
