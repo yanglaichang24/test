@@ -11,12 +11,8 @@ third-class-test/src/test/
 third-class-test/third-class-test.iml
 spring-test/spring-test.iml
 design-patterns/design-patterns.iml
-algorithm/src/
-design-patterns/target/
 jdk-class-test/src/main/java/com/ylch/test/jdk_class_test/List/
 jdk-class-test/src/main/java/com/ylch/test/jdk_class_test/set/
-secutiry_test/src/main/resources/
-third-class-test/src/main/resources/
 third-class-test/target/
 web/src/main/webapp/index.jsp
 web/target/

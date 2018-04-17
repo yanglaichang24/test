@@ -17,6 +17,7 @@ public class Ringbuffer {
     private Boolean empty() {
         return head == tail;
     }
+
     private Boolean full() {
         return (tail + 1) % bufferSize == head;
     }

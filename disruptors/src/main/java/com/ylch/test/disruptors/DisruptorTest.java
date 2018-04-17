@@ -1,4 +1,5 @@
 /*
+
 package com.ylch.test.disruptors;
 
 import com.lmax.disruptor.EventFactory;
@@ -11,13 +12,14 @@ import com.lmax.disruptor.dsl.ProducerType;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 */
 /**
  * Created by yanglaichang1 on 2017/10/11.
  *//*
 
-public class DisruptorTest {
 
+public class DisruptorTest {
 
     public static void main(String[] args) {
         EventFactory<LongEvent> eventFactory = new LongEventFactory();
@@ -31,8 +33,6 @@ public class DisruptorTest {
         EventHandler<LongEvent> eventHandler = new LongEventHandler();
         disruptor.handleEventsWith(eventHandler);
         disruptor.start();
-
-
 
         RingBuffer<LongEvent> ringBuffer = disruptor.getRingBuffer();
         long sequence = ringBuffer.next();//请求下一个事件序号；

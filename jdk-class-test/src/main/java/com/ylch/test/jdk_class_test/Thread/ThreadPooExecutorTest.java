@@ -50,7 +50,6 @@ public class ThreadPooExecutorTest {
         System.out.println("线程被中断");
         scheduledExecutorService.shutdown();
 
-
     }
 
 }

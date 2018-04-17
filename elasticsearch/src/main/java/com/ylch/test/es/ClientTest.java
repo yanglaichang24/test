@@ -112,7 +112,7 @@ public class ClientTest {
             }
 
             public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-
+                System.out.println(response);
             }
 
             public void afterBulk(long executionId, BulkRequest request, Throwable failure) {

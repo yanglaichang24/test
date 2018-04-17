@@ -18,6 +18,6 @@ public class TraderInfoHandler implements EventHandler<TraderInfo>,WorkHandler<T
 
     public void onEvent(TraderInfo event) throws Exception {
         event.setId(UUID.randomUUID().toString());//简单生成下ID
-        System.out.println("消费数据"  + Thread.currentThread().getName() + " : " + event.getPrice());
+        System.out.println("消费数据"  + Thread.currentThread().getName() + " : "+event.getId() +":"+ event.getPrice());
     }
 }
